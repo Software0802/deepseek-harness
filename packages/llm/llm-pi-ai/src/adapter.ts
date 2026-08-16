@@ -145,6 +145,17 @@ function resolveReasoningLevel(
   )
 }
 
+/** Selector labels for every canonical pi-ai level. A model offers a subset. */
+const THINKING_LEVEL_NAMES: Record<ModelThinkingLevel, string> = {
+  off: 'Off',
+  minimal: 'Minimal',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  xhigh: 'xHigh',
+  max: 'Max',
+}
+
 /**
  * Selectable reasoning efforts for one model, or nothing at all.
  *
@@ -156,7 +167,8 @@ function resolveReasoningLevel(
  * effort — so a provider whose own default is to think would keep thinking with
  * `off` selected. Omitting `reasoning` entirely is the seam's way of saying the
  * capability is unavailable, which leaves the surface offering only the
- * provider's default.
+ * provider's default. Offered ids come from that model's `thinkingLevelMap`;
+ * `max` and `xhigh` are independent keys.
  * @param model - the resolved model descriptor.
  * @param defaultLevel - the profile's configured effort, already validated.
  * @returns the `reasoning` field, or an empty object when none can be offered.
@@ -171,7 +183,7 @@ function reasoningInfo(
     reasoning: {
       efforts: levels.map(level => ({
         id: ReasoningEffortId(level),
-        name: `${level.charAt(0).toUpperCase()}${level.slice(1)}`,
+        name: THINKING_LEVEL_NAMES[level],
       })),
       ...defaultLevel === undefined ? {} : { defaultEffort: ReasoningEffortId(defaultLevel) },
     },

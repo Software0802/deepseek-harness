@@ -667,6 +667,8 @@ export interface ApiProxyDefaults {
    * falls back to platform detection ({@link canOpenNativePath}).
    */
   canOpenPath?: () => boolean
+  /** Desktop visual-enhancement runtime; absent when the host does not mount it. */
+  visionEnhancement?: import('./vision-enhancement.ts').VisionEnhancementRuntime
 }
 
 /** The tool/call payload fields the presenter path reads. */
@@ -3465,6 +3467,43 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             message: error instanceof Error ? error.message : String(error),
             details: { settingsNs },
           }))
+        }
+      },
+    },
+
+    vision: {
+      async status(request) {
+        if (defaults.visionEnhancement === undefined) {
+          return err(request, { code: 'internal', message: '视觉能力增强服务未安装。', details: {} })
+        }
+        return ok(request, await defaults.visionEnhancement.status())
+      },
+      async test(request, signal) {
+        if (defaults.visionEnhancement === undefined) {
+          return err(request, { code: 'internal', message: '视觉能力增强服务未安装。', details: {} })
+        }
+        try {
+          return ok(request, await defaults.visionEnhancement.test(request.payload, signal))
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
+        }
+      },
+      async enable(request, signal) {
+        if (defaults.visionEnhancement === undefined) {
+          return err(request, { code: 'internal', message: '视觉能力增强服务未安装。', details: {} })
+        }
+        try {
+          return ok(request, await defaults.visionEnhancement.enable(request.payload, signal))
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'internal',
+            message: error instanceof Error ? error.message : String(error),
+            details: {},
+          })
         }
       },
     },

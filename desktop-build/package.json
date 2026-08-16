@@ -1,0 +1,19 @@
+{
+  "name": "dsh-desktop-build",
+  "version": "0.1.0-rc.6",
+  "private": true,
+  "description": "Electron-builder project for the DeepSeek Harness desktop shell (vendored Studio main process + official host + this fork's patches)",
+  "main": "app/lib/main.js",
+  "scripts": {
+    "stage": "powershell -ExecutionPolicy Bypass -File stage-app.ps1",
+    "assemble": "powershell -ExecutionPolicy Bypass -File assemble.ps1",
+    "dist": "electron-builder --win nsis",
+    "dist:win": "electron-builder --win nsis",
+    "dist:linux": "electron-builder --linux AppImage deb",
+    "pack": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "^43.4.0",
+    "electron-builder": "^26.0.0"
+  }
+}

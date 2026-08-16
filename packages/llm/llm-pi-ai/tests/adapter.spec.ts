@@ -515,6 +515,41 @@ describe('provider profile lifecycle', () => {
     })
   })
 
+  it('offers max and xhigh independently per model on the same route', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: {
+        'acme-gateway': {
+          apiKeyEnv: 'PI_TEST_KEY',
+          api: 'openai-completions',
+          baseURL: 'https://acme.test/v1',
+          models: [
+            {
+              id: 'has-max',
+              contextWindow: 65_536,
+              maxTokens: 4096,
+              reasoningEfforts: { off: null, high: 'high', max: 'max' },
+            },
+            {
+              id: 'has-xhigh',
+              contextWindow: 65_536,
+              maxTokens: 4096,
+              reasoningEfforts: { off: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh' },
+            },
+          ],
+        },
+      },
+    })
+
+    const withMax = await ctx.llm.resolveModelInfo('acme-gateway', 'has-max')
+    const withXhigh = await ctx.llm.resolveModelInfo('acme-gateway', 'has-xhigh')
+    expect(withMax.reasoning?.efforts.map(effort => effort.id)).toEqual(['off', 'high', 'max'])
+    expect(withXhigh.reasoning?.efforts.map(effort => effort.id)).toEqual(['off', 'low', 'medium', 'high', 'xhigh'])
+    expect(withMax.reasoning?.efforts.find(effort => effort.id === 'max')?.name).toBe('Max')
+    expect(withXhigh.reasoning?.efforts.find(effort => effort.id === 'xhigh')?.name).toBe('xHigh')
+  })
+
   it('sends the declared wire spelling and refuses undeclared levels before network I/O', async () => {
     vi.stubEnv('PI_TEST_KEY', 'test-key')
     const server = await mockServer([{ events: textEvents }])

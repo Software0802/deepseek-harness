@@ -284,6 +284,19 @@ export class FakeApiClient implements IApiClient {
     oauthCancel: payload => this.record('llm.oauthCancel', payload, Promise.resolve(ok({}))),
   }
 
+  readonly vision: IApiClient['vision'] = {
+    status: payload => this.record('vision.status', payload, Promise.resolve(ok({
+      enabled: false, configured: false, provider: 'xai' as const, model: 'grok-4.6',
+      apiKeyUrl: 'https://console.x.ai/', providers: [],
+    }))),
+    test: payload => this.record('vision.test', payload, Promise.resolve(ok({
+      provider: 'xai' as const, model: 'grok-4.6', description: 'fake',
+    }))),
+    enable: payload => this.record('vision.enable', payload, Promise.resolve(ok({
+      provider: 'xai' as const, model: 'grok-4.6', description: 'fake',
+    }))),
+  }
+
   /** When true, streams never fire onOpen (misbehaving-carrier material for the handshake timeout guard). */
   suppressStreamOpen = false
 

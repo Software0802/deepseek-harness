@@ -49,6 +49,18 @@ When Studio publishes a newer desktop build:
 
 ## Local desktop install layout
 
-The installer places the app at `%LOCALAPPDATA%\Programs\@deepseek-aidsh-desktop`
-(per-user, electron-builder default); `build-desktop.ps1` locates it via the
-registry, or takes `-InstallDir`.
+The official Studio installer places the app at
+`%LOCALAPPDATA%\Programs\@deepseek-aidsh-desktop`. Reinstall and apply this
+fork's host patches with:
+
+```
+powershell -ExecutionPolicy Bypass -File desktop-studio/reinstall-desktop.ps1
+```
+
+That script downloads the verified rc.6 Setup.exe (SHA-256 in the table
+above), extracts it with `7z`, and runs `build-desktop.ps1`. The Studio
+shell ships Electron 43 / Node 24; a self-built Electron 34 asar cannot
+boot this host (`createZstdDecompress` is a Node 22 API).
+
+`build-desktop.ps1` also locates an existing install via the registry, or
+takes `-InstallDir`.

@@ -66,6 +66,9 @@ import {
   llmProvidersValueSchema,
 } from '../api/llm.schema.ts'
 import {
+  visionEnableValueSchema, visionStatusValueSchema, visionTestValueSchema,
+} from '../api/vision.schema.ts'
+import {
   subagentHistoryValueSchema,
   subagentInterruptValueSchema,
   subagentListValueSchema,
@@ -168,6 +171,11 @@ export interface IApiClient {
     oauthPoll(payload: RequestPayload<'llm.oauthPoll'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.oauthPoll'>>>
     oauthCancel(payload: RequestPayload<'llm.oauthCancel'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.oauthCancel'>>>
   }
+  vision: {
+    status(payload: RequestPayload<'vision.status'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'vision.status'>>>
+    test(payload: RequestPayload<'vision.test'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'vision.test'>>>
+    enable(payload: RequestPayload<'vision.enable'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'vision.enable'>>>
+  }
   /** client-response passthrough (rpcId is a backfill of the server-request's id — never minted here). */
   respond(message: ClientResponse, signal?: AbortSignal): Promise<RpcReceipt>
 }
@@ -232,6 +240,9 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'llm.oauthBegin': llmOauthBeginValueSchema,
   'llm.oauthPoll': llmOauthPollValueSchema,
   'llm.oauthCancel': llmOauthCancelValueSchema,
+  'vision.status': visionStatusValueSchema,
+  'vision.test': visionTestValueSchema,
+  'vision.enable': visionEnableValueSchema,
 }
 
 /** Default timeout for bounded unary calls (rpc-compare 2026-07-19: a hung host must not leave callers pending forever). */
@@ -511,6 +522,12 @@ export abstract class AbstractApiClient implements IApiClient {
     oauthBegin: (payload, signal) => this.callUnary('llm.oauthBegin', payload, signal),
     oauthPoll: (payload, signal) => this.callUnary('llm.oauthPoll', payload, signal),
     oauthCancel: (payload, signal) => this.callUnary('llm.oauthCancel', payload, signal),
+  }
+
+  readonly vision: IApiClient['vision'] = {
+    status: (payload, signal) => this.callUnary('vision.status', payload, signal),
+    test: (payload, signal) => this.callUnary('vision.test', payload, signal),
+    enable: (payload, signal) => this.callUnary('vision.enable', payload, signal),
   }
 
   readonly events: IApiClient['events'] = {

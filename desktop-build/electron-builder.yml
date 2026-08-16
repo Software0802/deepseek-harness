@@ -1,0 +1,79 @@
+# DeepSeek Harness desktop build configuration.
+#
+# The main process is the vendored Studio shell (desktop-studio/main-process,
+# @deepseek-ai/dsh-desktop): it spawns `dsh web` from the packaged host tree
+# and hosts the window. The host tree (resources/host, ~300MB) is assembled
+# by assemble.ps1 from a staging copy and this fork's prebuilt packages —
+# it is never committed. window controls and the drag surface follow the
+# official desktop layout (frame + hidden title bar + WCO overlay + CSS
+# -webkit-app-region), so the vendored shell and the official shell are
+# interchangeable at the window layer.
+
+appId: com.deepseekai.harness.desktop
+productName: DeepSeek Harness
+copyright: Copyright © 2026 Software0802
+
+directories:
+  app: app
+  output: dist
+  buildResources: build
+
+# The staged app/ directory (stage-app.ps1) is the Electron application:
+# vendored main process plus the runtime packages it imports. The host tree
+# must stay outside the asar because the main process reads it via
+# process.resourcesPath; afterPack.js copies it (extraResources' file
+# matcher is unreliable at this scale).
+files:
+  - "**/*"
+  - "!**/*.map"
+
+afterPack: ./afterPack.js
+
+asar: true
+electronVersion: 43.4.0
+npmRebuild: false
+nodeGypRebuild: false
+buildDependenciesFromSource: false
+
+publish:
+  provider: github
+  owner: Software0802
+  repo: deepseek-harness
+  releaseType: prerelease
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: DeepSeek Harness
+  uninstallDisplayName: DeepSeek Harness
+  artifactName: DeepSeek-Harness-${version}-windows-${arch}-Setup.${ext}
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  category: Development
+  icon: build/icon.png
+  executableName: deepseek-harness
+  maintainer: Software0802 <software0802@users.noreply.github.com>
+  synopsis: DeepSeek Harness desktop
+  artifactName: DeepSeek-Harness-${version}-linux-${arch}.${ext}
+  desktop:
+    entry:
+      Name: DeepSeek Harness
+      Comment: Plugin-based agent harness
+      StartupWMClass: deepseek-harness

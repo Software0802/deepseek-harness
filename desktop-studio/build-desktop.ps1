@@ -24,7 +24,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$repoRoot = Split-Path -Parent $PSScriptRoot
 $vendor = Join-Path $repoRoot "desktop-studio"
 
 function Find-InstallDir {
@@ -57,6 +57,7 @@ if (-not $SkipShell) {
 }
 
 $patches = @(
+  @{ pkg = "dsh-session"; src = "packages\core\session" },
   @{ pkg = "dsh-llm"; src = "packages\llm\llm" },
   @{ pkg = "dsh-llm-pi-ai"; src = "packages\llm\llm-pi-ai" },
   @{ pkg = "dsh-host-apiproxy"; src = "packages\host\apiproxy" },

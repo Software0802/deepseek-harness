@@ -291,6 +291,36 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
         return { rpcId: request.rpcId, result: { ok: true, value: {} } }
       },
     },
+    vision: {
+      async status(request) {
+        return {
+          rpcId: request.rpcId,
+          result: {
+            ok: true,
+            value: {
+              enabled: false,
+              configured: false,
+              provider: 'xai' as const,
+              model: 'grok-4.6',
+              apiKeyUrl: 'https://console.x.ai/',
+              providers: [],
+            },
+          },
+        }
+      },
+      async test(request) {
+        return {
+          rpcId: request.rpcId,
+          result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } },
+        }
+      },
+      async enable(request) {
+        return {
+          rpcId: request.rpcId,
+          result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } },
+        }
+      },
+    },
     events: {
       mux: (_request, signal) => stream(muxFrames, signal),
       host: (_request, signal) => stream(hostFrames, signal),

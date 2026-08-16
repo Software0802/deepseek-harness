@@ -932,6 +932,22 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/core/session/src/types.ts:264`](../packages/core/session/src/types.ts)
 
+### `vision/*`
+
+<a id="visionobservation--log-only"></a>
+
+#### `vision/observation` — log-only
+
+```ts persistence-catalog
+/**
+ * Cached visual observation for one image, so a later step can reuse the
+ * description instead of calling the vision provider again. Log-only.
+ */
+'vision/observation': VisionObservationEventData
+```
+
+来源：[`packages/host/apiproxy/src/vision-enhancement.ts:156`](../packages/host/apiproxy/src/vision-enhancement.ts)
+
 ### `web/*`
 
 <a id="webdeepseek-search-llm-request--log-only"></a>

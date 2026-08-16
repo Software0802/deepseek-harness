@@ -168,6 +168,14 @@ function scriptedFace(overrides: {
       oauthPoll: vi.fn(() => Promise.resolve(ok({ status: 'pending' as const }))),
       oauthCancel: vi.fn(() => Promise.resolve(ok({}))),
     },
+    vision: {
+      status: vi.fn(() => Promise.resolve(ok({
+        enabled: false, configured: false, provider: 'xai', model: 'grok-4.6',
+        apiKeyUrl: 'https://console.x.ai/', providers: [],
+      }))),
+      test: vi.fn(),
+      enable: vi.fn(),
+    },
     settings: {
       describe: vi.fn(() => Promise.resolve(ok({ writable: true, hasDocument: false, namespaces: wireNamespaces() }))),
       update,

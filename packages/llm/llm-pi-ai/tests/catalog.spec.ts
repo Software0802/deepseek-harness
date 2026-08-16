@@ -142,7 +142,10 @@ describe('hand-declared providers', () => {
         models: [
           { id: 'grok-4.3' },
           { id: 'grok-4.5' },
-          { id: 'grok-4.6', api: 'openai-responses', name: 'Grok 4.6', contextWindow: 500_000, maxTokens: 500_000 },
+          { id: 'grok-4.6', api: 'openai-responses', name: 'Grok 4.6', contextWindow: 500_000, maxTokens: 500_000,
+            reasoningEfforts: { off: null, low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh' } },
+          { id: 'sibling-max', api: 'openai-responses', name: 'Sibling Max', contextWindow: 65_536, maxTokens: 4096,
+            reasoningEfforts: { off: null, high: 'high', max: 'max' } },
         ],
       },
     })
@@ -152,6 +155,18 @@ describe('hand-declared providers', () => {
     expect(byId.get('grok-4.5')?.api).toBe('openai-responses')
     expect(byId.get('grok-4.6')?.api).toBe('openai-responses')
     expect(byId.get('grok-4.6')?.name).toBe('Grok 4.6')
+    expect(byId.get('grok-4.6')?.thinkingLevelMap).toEqual({
+      minimal: null,
+      low: 'low',
+      medium: 'medium',
+      high: 'high',
+      xhigh: 'xhigh',
+      max: null,
+    })
+    expect(getSupportedThinkingLevels(byId.get('grok-4.6') as Model<Api>))
+      .toEqual(['off', 'low', 'medium', 'high', 'xhigh'])
+    expect(getSupportedThinkingLevels(byId.get('sibling-max') as Model<Api>))
+      .toEqual(['off', 'high', 'max'])
   })
 
   it('refuses a model api beside a conflicting route api', () => {

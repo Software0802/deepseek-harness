@@ -2973,6 +2973,21 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       oauthPoll: request => ok(request, { status: 'pending' as const }),
       oauthCancel: request => ok(request, {}),
     },
+    vision: {
+      status: request => ok(request, {
+        enabled: false,
+        configured: true,
+        provider: 'xai' as const,
+        model: 'grok-4.6',
+        apiKeyUrl: 'https://console.x.ai/',
+        providers: [
+          { id: 'xai' as const, name: 'xAI', configured: true, defaultModel: 'grok-4.6', apiKeyUrl: 'https://console.x.ai/', modelEditable: false },
+          { id: 'openrouter' as const, name: 'OpenRouter', configured: false, defaultModel: 'openai/gpt-4.1-mini', apiKeyUrl: 'https://openrouter.ai/settings/keys', modelEditable: true },
+        ],
+      }),
+      test: request => ok(request, { provider: 'xai' as const, model: 'grok-4.6', description: 'fixture vision' }),
+      enable: request => ok(request, { provider: 'xai' as const, model: 'grok-4.6', description: 'fixture vision' }),
+    },
     respond(message: ClientResponse): Promise<RpcReceipt> {
       // Same routing discipline as the host: rpcId first, then the payload's
       // audit correlation; a settled or unknown id is not-pending.
@@ -3143,6 +3158,9 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'llm.oauthBegin': return this.api.llm.oauthBegin(request, signal)
       case 'llm.oauthPoll': return this.api.llm.oauthPoll(request)
       case 'llm.oauthCancel': return this.api.llm.oauthCancel(request)
+      case 'vision.status': return this.api.vision.status(request)
+      case 'vision.test': return this.api.vision.test(request, signal)
+      case 'vision.enable': return this.api.vision.enable(request, signal)
     }
   }
 
