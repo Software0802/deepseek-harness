@@ -14,7 +14,9 @@ desktop-build/resources/host/
 desktop-build/resources/desktop-resources/
 desktop-build/official-rc6-setup.exe
 desktop-build/official-rc6-extracted/
+desktop-build/main/
 desktop-build/*.png
+desktop-studio/main-process/lib/.dev-desktop-build.json
 *.tsbuildinfo
 pnpm-debug.log
 .pnpm-store/

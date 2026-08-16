@@ -25,8 +25,9 @@ The main process (`main-process/`) is the extracted, sourcemapped-build
 `dsh-desktop-runtime`: it spawns `dsh web` (`node …/@deepseek-ai/dsh/lib/bin.js
 web --host 127.0.0.1 --port 0`) and hosts the window. The plugins (`plugins/`)
 are the Studio-only UI additions — the cartoon skin, background customization,
-update center, and Beyondata brand surface. Neither has upstream source in the
-official repository; both are vendored as build inputs.
+and update center. This fork does not ship the third-party brand badge.
+Neither plugin has upstream source in the official repository; both are
+vendored as build inputs.
 
 ## What the shell does NOT change
 
