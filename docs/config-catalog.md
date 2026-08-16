@@ -912,6 +912,14 @@ export interface Config {
 export interface PiAiProviderProfile {
   /** Credential reference (environment-variable name) resolved per request through `ctx.credentials`. */
   apiKeyEnv?: string
+  /**
+   * How this route authenticates. `api-key` stores a key under {@link apiKeyEnv}
+   * and is the default for a route whose catalog offers one; `oauth` runs the
+   * catalog provider's subscription login and stores its credential under
+   * {@link apiKeyEnv}, which `oauth` requires. A route whose catalog offers no
+   * subscription login cannot choose `oauth`.
+   */
+  auth?: 'api-key' | 'oauth'
   /** Name shown by configuration surfaces; defaults to the route key. */
   displayName?: string
   /**
@@ -1079,7 +1087,7 @@ type WithheldThinkingFormat = 'chat-template' | 'qwen-chat-template'
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:172`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:188`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="deepseek-aidsh-llm-replay"></a>
 

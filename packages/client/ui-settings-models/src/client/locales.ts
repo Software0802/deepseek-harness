@@ -97,6 +97,15 @@ export const en = {
   onboardingSave: 'Save and continue',
   onboardingSaving: 'Saving…',
   keyRequired: 'Enter an API key to continue.',
+  oauthLogin: 'Sign in with subscription',
+  oauthDialogTitle: 'Sign in to {provider}',
+  oauthDialogIntro: 'Open the authorization page and enter this code to connect your subscription.',
+  oauthUserCode: 'Code',
+  oauthOpenPage: 'Open authorization page',
+  oauthWaiting: 'Waiting for authorization\u2026',
+  oauthSuccess: 'Subscription connected.',
+  oauthFailed: 'Sign-in failed',
+  oauthCancelLogin: 'Cancel sign-in',
 }
 
 /** The settings.models namespace key union. */
@@ -197,4 +206,13 @@ export const zh: { [Key in keyof typeof en]: string } = {
   onboardingSave: '保存并继续',
   onboardingSaving: '保存中…',
   keyRequired: '请输入 API 密钥后继续。',
+  oauthLogin: '使用订阅登录',
+  oauthDialogTitle: '登录 {provider}',
+  oauthDialogIntro: '打开授权页面并输入此代码，即可关联你的订阅。',
+  oauthUserCode: '代码',
+  oauthOpenPage: '打开授权页面',
+  oauthWaiting: '等待授权…',
+  oauthSuccess: '订阅已连接。',
+  oauthFailed: '登录失败',
+  oauthCancelLogin: '取消登录',
 }

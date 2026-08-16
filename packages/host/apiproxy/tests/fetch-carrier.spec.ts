@@ -281,6 +281,15 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async discoverModels(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { models: [] } } }
       },
+      async oauthBegin(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { id: 'flow-1', userCode: 'ABCD-EFGH', verificationUri: 'https://auth.example/device' } } }
+      },
+      async oauthPoll(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { status: 'pending' as const } } }
+      },
+      async oauthCancel(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: {} } }
+      },
     },
     events: {
       mux: (_request, signal) => stream(muxFrames, signal),

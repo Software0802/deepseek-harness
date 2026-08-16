@@ -13,10 +13,12 @@
  * way down: switching models mid-reply takes effect on the next step, never
  * inside the one in flight.
  *
- * Credentials stay outside that collection. The harness resolves a route's key
- * through its own seam and passes it as the request's `apiKey` option, which
- * pi-ai treats as the highest-priority auth override — so `Models` never holds
- * a credential store and the harness keeps its fail-loud reference semantics.
+ * Credentials stay outside that collection. The harness resolves a route's
+ * credential through its own seam — an API key, or a stored subscription
+ * credential it has already refreshed and exchanged for request auth — and
+ * passes the result as the request's `apiKey` option, which pi-ai treats as
+ * the highest-priority auth override — so `Models` never holds a credential
+ * store and the harness keeps its fail-loud reference semantics.
  *
  * @module dsh-llm-pi-ai/adapter
  */
@@ -71,11 +73,19 @@ export interface PiAiAdapterOptions {
    * pi-ai auth, which for an installed catalog route is its provider-native
    * ambient discovery; the plugin allows that only for a profile naming no
    * credential at all, because a named reference that misses throws `LlmError`
-   * `MISSING_CREDENTIAL` rather than falling back.
+   * `MISSING_CREDENTIAL` rather than falling back. A stored subscription
+   * credential is refreshed and exchanged for request auth before this
+   * returns, so the adapter only ever sees a usable bearer key.
    */
-  resolveApiKey: (provider: string, profile: ResolvedPiAiProviderProfile) => Promise<string | undefined>
+  resolveAuth: (provider: string, profile: ResolvedPiAiProviderProfile) => Promise<ResolvedPiAiAuth | undefined>
   /** Resolve the optional durable attachment service at request time. */
   resolveAttachments?: () => AttachmentStore | undefined
+}
+
+/** The request auth one resolved credential yields, ready for pi-ai's override. */
+export interface ResolvedPiAiAuth {
+  /** The bearer api key pi-ai sends; absent when the route authenticates by other means. */
+  apiKey?: string
 }
 
 /** Copy profile stream knobs into pi-ai's common option vocabulary. */
@@ -289,7 +299,7 @@ export class PiAiAdapter extends LlmAdapter {
       model,
       options.reasoningEffort ?? profile.reasoning,
     )
-    const apiKey = await this.config.resolveApiKey(options.provider, profile)
+    const auth = await this.config.resolveAuth(options.provider, profile)
 
     const consumer = new AbortController()
     const upstream = options.signal === undefined
@@ -311,7 +321,7 @@ export class PiAiAdapter extends LlmAdapter {
         ? toPiContext(options)
         : await toPiContext(options, attachments)
       const events = snapshot.models.streamSimple(model, context, {
-        ...profileOptions(profile, reasoning, apiKey),
+        ...profileOptions(profile, reasoning, auth?.apiKey),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },

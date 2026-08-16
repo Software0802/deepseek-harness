@@ -29,7 +29,22 @@ export interface ConfigurableProviderView {
    * surface must treat absence as "unknown", not as "shipped".
    */
   declared?: boolean
+  /**
+   * The authentication methods this route can be set up with, when the
+   * owning adapter can say: `api-key` for a stored key, `oauth` for a
+   * subscription login it runs. Absent means only the API-key entry is
+   * offered.
+   */
+  authMethods?: ('api-key' | 'oauth')[]
+  /** The selector label of this route's subscription login, when it offers one. */
+  oauthLoginLabel?: string
 }
+
+/** Live state of one begun subscription login, as the wire reports it. */
+export type OAuthFlowStatusView =
+  | { status: 'pending' }
+  | { status: 'success' }
+  | { status: 'failed'; error: string }
 
 /** Llm-domain unary methods (the map keys llm.* of RpcMethodMap). */
 export interface LlmApi {
@@ -74,6 +89,39 @@ export interface LlmApi {
     }>,
     signal?: AbortSignal,
   ): Promise<RpcResponse<{ models: DiscoveredModelView[] }>>
+
+  /**
+   * Begin one subscription (OAuth) login for a provider route served by the
+   * adapter family owning a settings namespace. Nothing is written yet: the
+   * reply is the flow id and the device code the user must enter on the
+   * provider's authorization page. The flow runs on the host until
+   * {@link LlmApi.oauthPoll} reports success or failure, or
+   * {@link LlmApi.oauthCancel} aborts it; a successful login stores the
+   * credential itself before it ever reports success.
+   */
+  oauthBegin(
+    request: RpcRequest<{ settingsNs: string; provider: string }>,
+    signal?: AbortSignal,
+  ): Promise<RpcResponse<{
+    id: string
+    userCode: string
+    verificationUri: string
+    expiresInSeconds?: number
+  }>>
+
+  /**
+   * Read the live state of one begun subscription login.
+   */
+  oauthPoll(
+    request: RpcRequest<{ settingsNs: string; id: string }>,
+  ): Promise<RpcResponse<OAuthFlowStatusView>>
+
+  /**
+   * Abort one begun subscription login.
+   */
+  oauthCancel(
+    request: RpcRequest<{ settingsNs: string; id: string }>,
+  ): Promise<RpcResponse<{}>>
 }
 
 /** Wire view of one model an interrogated endpoint advertises. */

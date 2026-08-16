@@ -46,7 +46,7 @@ function adapterOf(
 ): PiAiAdapter {
   return new PiAiAdapter({
     profiles: () => resolveProfiles(providers),
-    resolveApiKey: () => Promise.resolve(apiKey),
+    resolveAuth: () => Promise.resolve(apiKey === undefined ? undefined : { apiKey }),
   })
 }
 

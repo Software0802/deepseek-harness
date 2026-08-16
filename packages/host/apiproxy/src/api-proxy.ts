@@ -3380,6 +3380,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           settingsPath: [...entry.settingsPath],
           active: active.has(entry.provider),
           ...entry.declared === undefined ? {} : { declared: entry.declared },
+          ...entry.authMethods === undefined ? {} : { authMethods: [...entry.authMethods] },
+          ...entry.oauthLoginLabel === undefined ? {} : { oauthLoginLabel: entry.oauthLoginLabel },
         }))
         // Routes registered without a directory declaration still appear —
         // they exist and serve models — just with no settings address. No
@@ -3422,6 +3424,47 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             message: error instanceof Error ? error.message : String(error),
             details: { settingsNs, ...baseURL === undefined ? {} : { baseURL } },
           })
+        }
+      },
+
+      async oauthBegin(request, signal) {
+        const { settingsNs, provider } = request.payload
+        try {
+          const begun = await ctx.llm.oauthBegin(settingsNs, provider, signal)
+          return ok(request, begun)
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'oauth-begin-failed',
+            message: error instanceof Error ? error.message : String(error),
+            details: { settingsNs, provider },
+          })
+        }
+      },
+
+      async oauthPoll(request) {
+        const { settingsNs, id } = request.payload
+        try {
+          return ok(request, await ctx.llm.oauthPoll(settingsNs, id))
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'oauth-poll-failed',
+            message: error instanceof Error ? error.message : String(error),
+            details: { settingsNs },
+          })
+        }
+      },
+
+      oauthCancel(request): Promise<RpcResponse<{}>> {
+        const { settingsNs, id } = request.payload
+        try {
+          ctx.llm.oauthCancel(settingsNs, id)
+          return Promise.resolve(ok(request, {}))
+        } catch (error: unknown) {
+          return Promise.resolve(err(request, {
+            code: 'oauth-cancel-failed',
+            message: error instanceof Error ? error.message : String(error),
+            details: { settingsNs },
+          }))
         }
       },
     },

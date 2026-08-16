@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime, { LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
-import type { GenerateOptions, LlmConfigurableProvider, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, LlmConfigurableProvider, LlmOAuthStatus, StreamChunk } from '@deepseek-ai/dsh-llm'
 
 class NoopAdapter extends LlmAdapter {
 
@@ -264,5 +264,69 @@ describe('model discovery registry', () => {
       .rejects.toMatchObject({ code: 'INVALID_DISCOVERY' })
     // Naming a route alone is enough: the adapter may know it without an endpoint.
     await expect(ctx.llm.discoverModels('llm-example', { provider: 'known-route' })).resolves.toEqual([])
+  })
+})
+
+describe('subscription login flows', () => {
+  /** A scripted flow set: begin returns a device code, poll answers per id. */
+  function scriptedFlows() {
+    const polls = new Map<string, { status: 'pending' | 'success' | 'failed'; error?: string }>()
+    const cancelled: string[] = []
+    let begun: string | undefined
+    const flows: Parameters<typeof LlmRuntime.prototype.registerOAuthFlows>[1] = {
+      begin: vi.fn(async (provider: string) => {
+        begun = provider
+        return { id: 'flow-1', userCode: 'ABCD-EFGH', verificationUri: 'https://auth.example/device' }
+      }),
+      poll: vi.fn(async (id: string): Promise<LlmOAuthStatus> => {
+        const entry = polls.get(id)
+        if (entry === undefined) return { status: 'pending' }
+        if (entry.status === 'failed') return { status: 'failed', error: entry.error ?? 'the login failed' }
+        return { status: entry.status }
+      }),
+      cancel: vi.fn((id: string) => { cancelled.push(id) }),
+    }
+    return {
+      polls,
+      cancelled,
+      begun: () => begun,
+      flows,
+    }
+  }
+
+  it('begins, polls, and cancels through the registered flows of one namespace', async () => {
+    const ctx = await setup()
+    const scripted = scriptedFlows()
+    ctx.llm.registerOAuthFlows('llm-pi-ai', scripted.flows)
+
+    await expect(ctx.llm.oauthBegin('llm-pi-ai', 'xai'))
+      .resolves.toEqual({ id: 'flow-1', userCode: 'ABCD-EFGH', verificationUri: 'https://auth.example/device' })
+    expect(scripted.begun()).toBe('xai')
+
+    scripted.polls.set('flow-1', { status: 'success' })
+    await expect(ctx.llm.oauthPoll('llm-pi-ai', 'flow-1')).resolves.toEqual({ status: 'success' })
+    ctx.llm.oauthCancel('llm-pi-ai', 'flow-1')
+    expect(scripted.cancelled).toEqual(['flow-1'])
+  })
+
+  it('refuses an unnamed namespace, a duplicate registration, and an unserved one', async () => {
+    const ctx = await setup()
+    const scripted = scriptedFlows()
+    expect(() => ctx.llm.registerOAuthFlows('', scripted.flows)).toThrow(/non-empty settings namespace/)
+    ctx.llm.registerOAuthFlows('llm-pi-ai', scripted.flows)
+    expect(() => ctx.llm.registerOAuthFlows('llm-pi-ai', scripted.flows)).toThrow(/already registered/)
+
+    await expect(ctx.llm.oauthBegin('llm-absent', 'xai')).rejects.toMatchObject({ code: 'NO_OAUTH_FLOWS' })
+    await expect(ctx.llm.oauthBegin('llm-pi-ai', '')).rejects.toMatchObject({ code: 'INVALID_OAUTH' })
+    await expect(ctx.llm.oauthPoll('llm-pi-ai', '')).rejects.toMatchObject({ code: 'INVALID_OAUTH' })
+    expect(() => { ctx.llm.oauthCancel('llm-pi-ai', '') }).toThrow(/needs a flow id/)
+  })
+
+  it('withdraws the offer when the registration disposes', async () => {
+    const ctx = await setup()
+    const scripted = scriptedFlows()
+    const dispose = ctx.llm.registerOAuthFlows('llm-pi-ai', scripted.flows)
+    dispose()
+    await expect(ctx.llm.oauthBegin('llm-pi-ai', 'xai')).rejects.toMatchObject({ code: 'NO_OAUTH_FLOWS' })
   })
 })

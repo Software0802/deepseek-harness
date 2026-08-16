@@ -673,3 +673,89 @@ select.input {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
+
+/* Subscription (OAuth) login: the button rides the secondary capsule like
+   every other quiet action on a card, and the dialog shows the device code
+   prominently — it is the one thing the user must copy. */
+.oauthButton {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.oauthButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.oauthButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.oauthButton:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+.oauthDialog {
+  width: min(440px, 100%);
+}
+
+.oauthIntro {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.oauthCode {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  font-family: var(--ds-font-family-code);
+  font-size: 20px;
+  line-height: 28px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  color: var(--dsw-alias-label-primary);
+  user-select: all;
+}
+
+.oauthLink {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary-bluish);
+}
+
+.oauthLink:hover {
+  text-decoration: underline;
+}
+
+.oauthWaiting {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.oauthSuccess {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-state-success-primary);
+}

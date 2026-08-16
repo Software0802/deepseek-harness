@@ -73,7 +73,14 @@ describe('request-level dynamic profiles', () => {
       settingsNs: 'llm-pi-ai',
       settingsPath: ['providers', 'openai'],
       declared: false,
+      authMethods: ['api-key'],
     })
+    // The subscription-login catalog route is offered with its own label.
+    expect(directory).toContainEqual(expect.objectContaining({
+      provider: 'xai',
+      authMethods: ['api-key', 'oauth'],
+      oauthLoginLabel: 'Sign in with SuperGrok or X Premium',
+    }))
     await ctx.settings.update(NS, {
       providers: { deepseek: { apiKeyEnv: 'PI_DYNAMIC_KEY', baseURL: server.url } },
     })
@@ -213,5 +220,73 @@ describe('request-level dynamic profiles', () => {
     // changed, so no swap should happen at all.
     await ctx.settings.update(NS, { providers: { anthropic: {}, openai: {} } })
     expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(before)
+  })
+
+  it('serves a hand-declared route from a stored subscription credential until it expires', async () => {
+    const dir = await home()
+    const fresh = {
+      type: 'oauth',
+      access: 'subscription-access-token',
+      refresh: 'subscription-refresh-token',
+      expires: Date.now() + 3600_000,
+    }
+    // Single-quoted so the YAML document stores the JSON as a string, exactly
+    // as the credentials seam writes it back after a login.
+    await writeFile(join(dir, '.credentials.yaml'), `PI_OAUTH_KEY: '${JSON.stringify(fresh)}'\n`, { mode: 0o600 })
+    const server = await mockServer([{ events: textEvents }])
+    // A hand-declared route (no catalog entry) sharing a reference that holds
+    // a subscription credential: the request path has no catalog login to
+    // refresh with, but the access token is still a bearer token.
+    const ctx = await boot(dir, {
+      providers: {
+        'acme-gateway': {
+          api: 'openai-completions',
+          baseURL: server.url,
+          models: [{ id: 'acme-model', contextWindow: 8192, maxTokens: 1024 }],
+        },
+      },
+    })
+    await ctx.settings.update(NS, {
+      providers: {
+        'acme-gateway': {
+          api: 'openai-completions',
+          baseURL: server.url,
+          apiKeyEnv: 'PI_OAUTH_KEY',
+          models: [{ id: 'acme-model', contextWindow: 8192, maxTokens: 1024 }],
+        },
+      },
+    })
+
+    const result = await assemble(ctx, { provider: 'acme-gateway', model: 'acme-model', messages: [] })
+    expect(result.finish.kind).toBe('stop')
+    expect(server.headers[0]?.authorization).toBe('Bearer subscription-access-token')
+  })
+
+  it('refuses an expired subscription credential on a hand-declared route with a re-login instruction', async () => {
+    const dir = await home()
+    const stale = {
+      type: 'oauth',
+      access: 'stale-access-token',
+      refresh: 'stale-refresh-token',
+      expires: Date.now() - 1000,
+    }
+    await writeFile(join(dir, '.credentials.yaml'), `PI_OAUTH_KEY: '${JSON.stringify(stale)}'\n`, { mode: 0o600 })
+    const ctx = await boot(dir, { providers: {} })
+    await ctx.settings.update(NS, {
+      providers: {
+        'acme-gateway': {
+          api: 'openai-completions',
+          baseURL: 'http://127.0.0.1:1/v1',
+          apiKeyEnv: 'PI_OAUTH_KEY',
+          models: [{ id: 'acme-model', contextWindow: 8192, maxTokens: 1024 }],
+        },
+      },
+    })
+
+    const result = await assemble(ctx, { provider: 'acme-gateway', model: 'acme-model', messages: [] })
+    expect(result.finish).toMatchObject({ kind: 'error' })
+    const failure = result.finish.kind === 'error' ? result.finish.failure : undefined
+    expect(failure?.code).toBe('INVALID_CREDENTIAL')
+    expect(failure?.message).toMatch(/has expired.*sign in again/)
   })
 })

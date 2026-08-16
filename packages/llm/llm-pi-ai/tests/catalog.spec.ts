@@ -132,6 +132,38 @@ describe('hand-declared providers', () => {
       .toContain('off')
   })
 
+  it('adds a model the catalog has not caught up with on a mixed-protocol route via its own api', () => {
+    // xAI's shipped catalog spans Chat Completions (grok-4.3) and Responses
+    // (grok-4.5), so there is no shared route protocol for a model the catalog
+    // does not describe; the newest model names its own.
+    const resolved = resolveProfiles({
+      xai: {
+        apiKeyEnv: 'XAI_API_KEY',
+        models: [
+          { id: 'grok-4.3' },
+          { id: 'grok-4.5' },
+          { id: 'grok-4.6', api: 'openai-responses', name: 'Grok 4.6', contextWindow: 500_000, maxTokens: 500_000 },
+        ],
+      },
+    })
+    const models = resolved.get('xai')?.piProvider.getModels() ?? []
+    const byId = new Map(models.map(model => [model.id, model]))
+    expect(byId.get('grok-4.3')?.api).toBe('openai-completions')
+    expect(byId.get('grok-4.5')?.api).toBe('openai-responses')
+    expect(byId.get('grok-4.6')?.api).toBe('openai-responses')
+    expect(byId.get('grok-4.6')?.name).toBe('Grok 4.6')
+  })
+
+  it('refuses a model api beside a conflicting route api', () => {
+    expect(() => resolveProfiles({
+      'acme-gateway': {
+        api: 'openai-completions',
+        baseURL: 'https://acme.test',
+        models: [{ id: 'm', api: 'openai-responses', contextWindow: 1, maxTokens: 1 }],
+      },
+    })).toThrow(/speaks one protocol/)
+  })
+
   it('joins the configurable-provider directory so a settings surface can reach it', async () => {
     const server = await mockServer([])
     const ctx = await harness(gateway(`${server.url}/v1`))
@@ -577,12 +609,16 @@ describe('catalog routes with per-model configuration', () => {
     expect(auth?.auth.apiKey).toBe('codex-token')
   })
 
-  it('leaves an OAuth-only catalog route unconfigured when its profile names no key', () => {
-    // Nothing to add: this adapter resolves credentials through its own seam
-    // and holds no OAuth store, so declaring the provider configured would
-    // trade a truthful refusal for an endpoint's 401.
-    const resolved = resolveProfiles({ 'openai-codex': {} })
-    expect(resolved.get('openai-codex')?.piProvider.auth.apiKey).toBeUndefined()
+  it('requires a reference on an OAuth-only catalog route', () => {
+    // The harness runs the subscription login and stores its credential under
+    // the profile's apiKeyEnv, so a keyless profile on an oauth-only route
+    // could never authenticate — refusing it where it is written beats
+    // storing a route that can never serve a request.
+    expect(() => resolveProfiles({ 'openai-codex': {} })).toThrow(/apiKeyEnv/)
+    // With a reference the route resolves; naming one also gives the route
+    // the harness's own api-key method, so a stored key stays a usable path.
+    const resolved = resolveProfiles({ 'openai-codex': { apiKeyEnv: 'OPENAI_CODEX_API_KEY' } })
+    expect(resolved.get('openai-codex')?.piProvider.auth.apiKey).toBeDefined()
   })
 })
 
@@ -838,7 +874,7 @@ describe('resolution snapshots', () => {
       profiles: () => current,
       // Credential resolution is the real await inside a stream call, and the
       // window a configuration change has to land in.
-      resolveApiKey: async () => { await held; return 'k' },
+      resolveAuth: async () => { await held; return { apiKey: 'k' } },
     })
 
     const chunks: StreamChunk[] = []
@@ -867,7 +903,7 @@ describe('resolution snapshots', () => {
     const first = await mockServer([{ events: textEvents }])
     const second = await mockServer([{ events: textEvents }])
     let current = resolveProfiles({ deepseek: { baseURL: `${first.url}/v1` } })
-    const adapter = new PiAiAdapter({ profiles: () => current, resolveApiKey: () => Promise.resolve('k') })
+    const adapter = new PiAiAdapter({ profiles: () => current, resolveAuth: () => Promise.resolve({ apiKey: 'k' }) })
     const drain = async (): Promise<void> => {
       for await (const _chunk of adapter.stream({
         provider: 'deepseek', model: 'deepseek-v4-flash', messages: [],
@@ -934,20 +970,19 @@ describe('configurable-provider directory', () => {
     expect(ctx.llm.listConfigurableProviders()).toHaveLength(catalogOnly)
   })
 
-  it('withholds a catalog route this adapter cannot authenticate', async () => {
+  it('offers an oauth-only catalog route with its subscription login', async () => {
     const ctx = await harness({})
     const offered = ctx.llm.listConfigurableProviders().map(entry => entry.provider)
 
     // `openai-codex` is the one installed provider that authenticates through
-    // OAuth alone. pi-ai resolves OAuth only from a *stored* credential, this
-    // adapter constructs its collection with no credential store, and nothing
-    // here runs a login flow — so every request on such a route fails with
-    // `Provider is not configured` before it goes out. Offering it would put a
-    // provider on the settings page that no amount of configuration can make
-    // work.
-    expect(offered).not.toContain('openai-codex')
-    // A provider that offers OAuth *beside* an api-key method keeps its entry:
-    // the key is a path this adapter can serve.
+    // OAuth alone. The harness runs the catalog's own subscription login and
+    // stores the credential itself, so the route is offerable with a working
+    // posture — its directory entry names the login as its only method.
+    expect(offered).toContain('openai-codex')
+    expect(ctx.llm.listConfigurableProviders().find(entry => entry.provider === 'openai-codex'))
+      .toMatchObject({ authMethods: ['oauth'] })
+    // A provider that offers OAuth *beside* an api-key method keeps both
+    // entries: the key is a path this adapter can serve.
     expect(offered).toContain('anthropic')
     expect(offered).toContain('openai')
   })
@@ -966,6 +1001,8 @@ describe('configurable-provider directory', () => {
       settingsNs: 'llm-pi-ai',
       settingsPath: ['providers', 'openai-codex'],
       declared: false,
+      // The subscription-only route is offered with its login method now.
+      authMethods: ['oauth'],
     })
   })
 })

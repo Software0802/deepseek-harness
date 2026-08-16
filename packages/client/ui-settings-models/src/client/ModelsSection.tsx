@@ -58,6 +58,10 @@ interface EditorTarget extends ProviderIdentity {
   credentialRef?: string
   /** The adapter reports this route as one it does not ship (see {@link ProviderEditorProps.declared}). */
   declared?: boolean
+  /** The authentication methods the adapter reports for this route. */
+  authMethods?: readonly ('api-key' | 'oauth')[]
+  /** The subscription login's own label, when the adapter shipped one. */
+  oauthLoginLabel?: string
 }
 
 /** Values that vary around the shared provider-editor rendering. */
@@ -76,6 +80,8 @@ function renderProviderEditor({ target, ...props }: ProviderEditorRenderProps): 
       displayName={target.displayName}
       settingsPath={target.settingsPath}
       {...target.declared === true ? { declared: true } : {}}
+      {...target.authMethods === undefined ? {} : { authMethods: target.authMethods }}
+      {...target.oauthLoginLabel === undefined ? {} : { oauthLoginLabel: target.oauthLoginLabel }}
       {...props}
     />
   )
@@ -148,6 +154,8 @@ function targetOf(row: ProviderRow): EditorTarget {
     // route-level fields only a declared route owns off the card, exactly as
     // it leaves the custom tag off the row.
     ...row.entry.declared === true ? { declared: true } : {},
+    ...row.entry.authMethods === undefined ? {} : { authMethods: row.entry.authMethods },
+    ...row.entry.oauthLoginLabel === undefined ? {} : { oauthLoginLabel: row.entry.oauthLoginLabel },
   }
 }
 
@@ -420,6 +428,9 @@ function Loaded({ injected }: { injected: ModelsSectionInjected }): ReactNode {
                 hideTitle
                 namespace={addNamespace}
                 settingsPath={addTarget.settingsPath}
+                {...addTarget.declared === true ? { declared: true } : {}}
+                {...addTarget.authMethods === undefined ? {} : { authMethods: addTarget.authMethods }}
+                {...addTarget.oauthLoginLabel === undefined ? {} : { oauthLoginLabel: addTarget.oauthLoginLabel }}
                 api={api}
                 t={t}
                 readOnly={!state.writable}

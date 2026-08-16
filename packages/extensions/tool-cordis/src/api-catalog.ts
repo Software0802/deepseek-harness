@@ -825,6 +825,29 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the advertised models, deduplicated in endpoint order.',
       },
       {
+        signature: 'registerOAuthFlows( settingsNs: string, flows: LlmOAuthFlows, ): () => void',
+        description: 'Offer subscription (OAuth) login flows for the settings namespace this plugin owns, alongside its model discovery. The namespace is the key because that is what a configuration surface already holds from the configurable-provider directory: `oauthBegin` dispatches to the owning family and the family resolves the exact route\'s own provider flow. Disposed with the fiber.',
+        parameters: [{ name: 'settingsNs', description: 'the namespace whose provider routes these flows serve.' }, { name: 'flows', description: 'begins, polls, and cancels one login each by opaque id.' }],
+        returns: 'the disposer that withdraws the offer.',
+      },
+      {
+        signature: 'async oauthBegin( settingsNs: string, provider: string, signal?: AbortSignal, ): Promise<LlmOAuthBeginResult>',
+        description: 'Begin one subscription login for a provider route served by the flows registered for a settings namespace.',
+        parameters: [{ name: 'settingsNs', description: 'the namespace whose flows serve the route.' }, { name: 'provider', description: 'the route to authenticate.' }, { name: 'signal', description: 'optional cancellation for the begin step (transport disconnect); the flow itself keeps running until polled or cancelled.' }],
+        returns: 'the flow id and device code to display to the user.',
+      },
+      {
+        signature: 'async oauthPoll(settingsNs: string, id: string): Promise<LlmOAuthStatus>',
+        description: 'Read the live state of one begun subscription login.',
+        parameters: [{ name: 'settingsNs', description: 'the namespace whose flows own the flow.' }, { name: 'id', description: 'the flow id returned by {@link LlmRuntime.oauthBegin}.' }],
+        returns: 'pending, success, or failed-with-message.',
+      },
+      {
+        signature: 'oauthCancel(settingsNs: string, id: string): void',
+        description: 'Abort one begun subscription login.',
+        parameters: [{ name: 'settingsNs', description: 'the namespace whose flows own the flow.' }, { name: 'id', description: 'the flow id returned by {@link LlmRuntime.oauthBegin}.' }],
+      },
+      {
         signature: 'providerRetryPolicy(provider: string): ResolvedRetryPolicy',
         description: 'Resolve the retry policy captured when one provider route was registered.',
         parameters: [{ name: 'provider', description: 'registered provider route to inspect.' }],
@@ -3275,7 +3298,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmConfigurableProvider',
-    declaration: 'export interface LlmConfigurableProvider {\n    provider: string;\n    displayName: string;\n    settingsNs: string;\n    settingsPath: readonly string[];\n    declared?: boolean;\n}',
+    declaration: 'export interface LlmConfigurableProvider {\n    provider: string;\n    displayName: string;\n    settingsNs: string;\n    settingsPath: readonly string[];\n    declared?: boolean;\n    authMethods?: readonly LlmOAuthMethod[];\n    oauthLoginLabel?: string;\n}',
   },
   {
     name: 'LlmDiscoveredModel',
@@ -3302,6 +3325,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface LlmModelReasoningInfo {\n    efforts: readonly LlmReasoningEffortInfo[];\n    defaultEffort?: ReasoningEffortId;\n}',
   },
   {
+    name: 'LlmOAuthBeginResult',
+    declaration: 'export interface LlmOAuthBeginResult extends LlmOAuthDeviceCode {\n    id: string;\n}',
+  },
+  {
+    name: 'LlmOAuthDeviceCode',
+    declaration: 'export interface LlmOAuthDeviceCode {\n    userCode: string;\n    verificationUri: string;\n    expiresInSeconds?: number;\n}',
+  },
+  {
+    name: 'LlmOAuthFlows',
+    declaration: 'export interface LlmOAuthFlows {\n    begin(provider: string, signal?: AbortSignal): Promise<LlmOAuthBeginResult>;\n    poll(id: string): Promise<LlmOAuthStatus>;\n    cancel(id: string): void;\n}',
+  },
+  {
+    name: 'LlmOAuthMethod',
+    declaration: 'export type LlmOAuthMethod = \'api-key\' | \'oauth\';',
+  },
+  {
+    name: 'LlmOAuthStatus',
+    declaration: 'export type LlmOAuthStatus = {\n    status: \'pending\';\n} | {\n    status: \'success\';\n} | {\n    status: \'failed\';\n    error: string;\n};',
+  },
+  {
     name: 'LlmProviderInfo',
     declaration: 'export interface LlmProviderInfo {\n    id: string;\n    name: string;\n}',
   },
@@ -3315,7 +3358,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmRuntime',
-    declaration: 'export class LlmRuntime extends Service {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+    declaration: 'export class LlmRuntime extends Service {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<LlmDiscoveredModel[]>;\n    registerOAuthFlows(settingsNs: string, flows: LlmOAuthFlows): () => void;\n    async oauthBegin(settingsNs: string, provider: string, signal?: AbortSignal): Promise<LlmOAuthBeginResult>;\n    async oauthPoll(settingsNs: string, id: string): Promise<LlmOAuthStatus>;\n    oauthCancel(settingsNs: string, id: string): void;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
   {
     name: 'LspHover',

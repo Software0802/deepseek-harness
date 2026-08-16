@@ -16,7 +16,13 @@
 
 选择**添加提供方**，选取 Anthropic 或 OpenAI 等提供方，输入其 API 密钥并保存。已安装目录会提供端点、协议和模型列表。
 
-使用原生认证的提供方需要各自的原生凭据。Bedrock、Vertex、Azure 和 Codex 分别使用 AWS 凭据与区域、ADC 项目、`api-version` 和 OAuth；只填写 API 密钥字段无法完成配置。
+使用原生认证的提供方需要各自的原生凭据。Bedrock、Vertex 和 Azure 分别使用 AWS 凭据与区域、ADC 项目和 `api-version`；只填写 API 密钥字段无法完成配置。
+
+### 使用订阅登录
+
+部分目录提供方还提供订阅登录——xAI 的 Grok 支持用 **SuperGrok 或 X Premium** 账号登录。打开该提供方的卡片，点击登录按钮（Grok 上显示为「Sign in with SuperGrok or X Premium」）。对话框会显示一个代码和授权链接：打开链接、输入代码并批准即可。对话框会报告订阅已连接，该提供方的模型（Grok 为 `grok-4.3`、`grok-4.5`、`grok-build-0.1`）立即可用。
+
+登录存入的凭据在请求发现其过期时会自动刷新。同一提供方仍可存储 API 密钥——两条路径共用卡片上的凭据字段，登录会替换之前存储的密钥。
 
 ## 添加自定义提供方
 

@@ -20,6 +20,12 @@
  *         retryPolicy:
  *           mode: normal
  *           maxRetries: 2
+ *       # Catalog route authenticated by a subscription login (xAI's
+ *       # SuperGrok / X Premium sign-in is the shipped one). The login
+ *       # stores its credential under apiKeyEnv, which oauth requires.
+ *       xai:
+ *         apiKeyEnv: XAI_API_KEY
+ *         auth: oauth
  *       # Catalog route with the catalog narrowed and one capacity corrected.
  *       anthropic:
  *         apiKeyEnv: ANTHROPIC_API_KEY
@@ -56,15 +62,20 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
-import { assertUsableApiKey, LlmError } from '@deepseek-ai/dsh-llm'
+import { assertUsableApiKey, INVALID_CREDENTIAL_CODE, LlmError } from '@deepseek-ai/dsh-llm'
 import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigurableProvider } from '@deepseek-ai/dsh-llm'
 import { deepEqualJson, installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { PiAiAdapter } from './adapter.ts'
-import { catalogProviderIds, catalogProviderTakesApiKey } from './catalog.ts'
+import type { ResolvedPiAiAuth } from './adapter.ts'
+import { catalogProviderAuthMethods, catalogProviderIds, catalogProviderOAuth } from './catalog.ts'
 import { assertServiceable, Config, resolveProfiles } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
+import { createOAuthFlows, oauthRequestAuth, parseOAuthCredential, serializeOAuthCredential } from './oauth.ts'
+
+export * from './oauth.ts'
 
 export { PiAiAdapter } from './adapter.ts'
 export type { PiAiAdapterOptions } from './adapter.ts'
@@ -106,10 +117,10 @@ function registrationFacts(profiles: ReadonlyMap<string, ResolvedPiAiProviderPro
 
 /**
  * The configurable-provider directory: every installed catalog route this
- * adapter can authenticate, plus every route the current profiles declare. A
- * hand-declared route has no catalog entry, so without this union it would
- * have no settings address and configuration surfaces could neither show nor
- * edit it.
+ * adapter can authenticate — with a stored API key or a subscription login —
+ * plus every route the current profiles declare. A hand-declared route has no
+ * catalog entry, so without this union it would have no settings address and
+ * configuration surfaces could neither show nor edit it.
  *
  * The profile half is unconditional, which is what keeps a route already
  * stored against a withheld provider editable and deletable rather than
@@ -123,6 +134,8 @@ function directoryEntries(
   const catalog = new Set(catalogProviderIds())
   const entries = new Map<string, LlmConfigurableProvider>()
   const declare = (provider: string, displayName: string): void => {
+    const methods = catalogProviderAuthMethods(provider)
+    const oauth = methods.includes('oauth') ? catalogProviderOAuth(provider) : undefined
     entries.set(provider, {
       provider,
       displayName,
@@ -132,15 +145,17 @@ function directoryEntries(
       // narrowing a shipped provider's models stores a profile too, and that
       // route is still one pi-ai knows.
       declared: !catalog.has(provider),
+      ...methods.length > 0 ? { authMethods: methods } : {},
+      ...oauth !== undefined && oauth.loginLabel !== undefined ? { oauthLoginLabel: oauth.loginLabel } : {},
     })
   }
-  // A provider whose only native method is OAuth leaves this adapter nothing
-  // to authenticate with, so offering it would put a card on the settings page
-  // whose own posture — no key, credentials discovered by the provider — fails
-  // every request. Catalog *membership* is unaffected, so `declare` above still
-  // answers what pi-ai ships.
+  // A provider whose only native method is OAuth is still offerable: the
+  // harness runs the catalog's own subscription login and stores the
+  // credential itself, so a card can offer that route with a working posture.
+  // Only a catalog provider with no harness-authenticatable method at all is
+  // withheld from the page, since nothing there could ever authenticate it.
   for (const provider of catalog) {
-    if (catalogProviderTakesApiKey(provider)) declare(provider, provider)
+    if (catalogProviderAuthMethods(provider).length > 0) declare(provider, provider)
   }
   for (const [provider, profile] of profiles) declare(provider, profile.displayName)
   return [...entries.values()]
@@ -172,10 +187,33 @@ export function apply(ctx: Context, config: Config): void {
   }
   profiles()
 
-  const resolveApiKey = async (
+  const resolveCredentialValue = async (ref: CredentialRef): Promise<string | undefined> => {
+    const credentials = ctx.get('credentials')
+    if (credentials !== undefined) {
+      const hit = await credentials.resolve(ref)
+      if (hit !== undefined) return hit.value
+    } else {
+      // Without the seam there is no managed store to rank against, so the
+      // environment is the whole credential plane.
+      const ambient = launchEnvironmentOf(ctx).get(ref)
+      if (ambient !== undefined && ambient.value.length > 0) return ambient.value
+    }
+    return undefined
+  }
+
+  /**
+   * Resolve one profile's credential into request auth. An API key passes
+   * through; a stored subscription credential — the JSON document a login
+   * wrote — is refreshed when expired, persisted again, and exchanged for a
+   * bearer key through the catalog's own OAuth flow, so the request path
+   * never sees a token document or an expiry. `undefined` means the profile
+   * names no credential and the route authenticates through its provider's
+   * own path; a named reference that misses fails loud either way.
+   */
+  const resolveAuth = async (
     provider: string,
     profile: ResolvedPiAiProviderProfile,
-  ): Promise<string | undefined> => {
+  ): Promise<ResolvedPiAiAuth | undefined> => {
     const ref = profile.apiKeyEnv
     // Only a profile that names no credential at all defers to pi-ai's
     // provider-native discovery. Once one is named, a miss must fail loud:
@@ -183,23 +221,64 @@ export function apply(ctx: Context, config: Config): void {
     // (OPENAI_API_KEY and friends), billing another tenant for a request the
     // deployment meant to authenticate differently.
     if (ref === undefined) return undefined
-    const credentials = ctx.get('credentials')
-    const hit = credentials !== undefined
-      ? (await credentials.resolve(ref))?.value
-      // Without the seam the environment is the whole credential plane.
-      : launchEnvironmentOf(ctx).get(ref)?.value
-    if (hit !== undefined && hit.length > 0) return assertUsableApiKey(hit, 'llm-pi-ai', ref)
-    throw new LlmError(
-      `llm-pi-ai: no credential for provider route "${provider}"; its profile resolves ${ref}, which is not`
-      + ` set — store ${ref} through the credentials service (the web Models page writes it) or export it,`
-      + ' and remove apiKeyEnv only if this provider should authenticate from pi-ai\'s own environment discovery',
-      'MISSING_CREDENTIAL',
-    )
+    const value = await resolveCredentialValue(ref)
+    if (value === undefined) {
+      throw new LlmError(
+        profile.auth === 'oauth'
+          ? `llm-pi-ai: no subscription credential for provider route "${provider}"; sign in on the web Models`
+            + ` page, or export ${ref} in the launching environment`
+          : `llm-pi-ai: no credential for provider route "${provider}"; its profile resolves ${ref}, which is not`
+            + ` set — store ${ref} through the credentials service (the web Models page writes it) or export it,`
+            + ' and remove apiKeyEnv only if this provider should authenticate from pi-ai\'s own environment discovery',
+        'MISSING_CREDENTIAL',
+      )
+    }
+    const oauthCredential = parseOAuthCredential(value)
+    if (oauthCredential === undefined) {
+      // A plain API key, or a malformed document — either way the api-key
+      // validator is the one that refuses a value that cannot authenticate.
+      return { apiKey: assertUsableApiKey(value, 'llm-pi-ai', ref) }
+    }
+    // A stored subscription credential, from this or an earlier login. The
+    // profile's `auth` field is deliberately not consulted: a login run while
+    // the profile still said `api-key` must keep working.
+    const oauth = catalogProviderOAuth(provider)
+    if (oauth === undefined) {
+      // A hand-declared route (one the catalog does not ship) has no login
+      // flow to refresh with, but its credential is still a bearer token:
+      // serve the stored access token until it expires, then fail loud with
+      // the one thing that can fix it — signing in again under a catalog
+      // route that shares this reference.
+      if (oauthCredential.expires > Date.now()) {
+        return { apiKey: oauthCredential.access }
+      }
+      throw new LlmError(
+        `llm-pi-ai: the subscription credential for provider route "${provider}" has expired, and its catalog`
+        + ' entry offers no login to refresh it with; sign in again on the Models page (the same provider family\'s'
+        + ' catalog route — for Grok that is "xai" — stores a fresh credential under the same reference)',
+        INVALID_CREDENTIAL_CODE,
+      )
+    }
+    // Refresh when expired (the login flow set the expiry with its own skew,
+    // so a token this side of that boundary is still valid) and persist the
+    // rotated credential best-effort: the seam owns durability, and the next
+    // request would refresh again if this write failed.
+    const auth = await oauthRequestAuth(oauth, oauthCredential, async (refreshed) => {
+      const store = ctx.get('credentials')
+      if (store === undefined) return
+      try {
+        await store.set(ref, serializeOAuthCredential(refreshed))
+      } catch (error) {
+        ctx.logger.warn('llm-pi-ai: could not persist the refreshed subscription credential for "%s"', provider)
+        ctx.logger.warn(error)
+      }
+    })
+    return auth.apiKey === undefined ? undefined : { apiKey: auth.apiKey }
   }
 
   const adapter = new PiAiAdapter({
     profiles,
-    resolveApiKey,
+    resolveAuth,
     resolveAttachments: () => ctx.get('attachments'),
   })
   // The full installed catalog is configurable from the moment the plugin
@@ -235,7 +314,7 @@ export function apply(ctx: Context, config: Config): void {
     if (provider === undefined) return undefined
     const profile = profiles().get(provider)
     if (profile === undefined) return undefined
-    return resolveApiKey(provider, profile)
+    return (await resolveAuth(provider, profile))?.apiKey
   }
   // Interrogating an endpoint is a configuration-time action over a draft, so
   // it is offered for the whole namespace rather than per route: the provider
@@ -244,6 +323,15 @@ export function apply(ctx: Context, config: Config): void {
   // and never holds a stored secret, so an already-configured route supplies
   // its own here rather than being interrogated unauthenticated.
   ctx.llm.registerModelDiscovery(NS, request => discoverModels(request, () => storedApiKey(request.provider)))
+  // Subscription logins for every catalog route that offers one. The flows
+  // are namespace-level like discovery: `begin` resolves the exact route's
+  // own flow. A still-pending login is aborted when this fiber stops.
+  const flows = createOAuthFlows({
+    profiles,
+    resolveStore: () => ctx.get('credentials'),
+  })
+  ctx.llm.registerOAuthFlows(NS, flows)
+  ctx.effect(() => () => { flows.dispose() }, 'llm-pi-ai: abort pending subscription logins')
   // Route effects bind to this apply fiber via the stable `ctx` reference,
   // even when a swap runs inside the scoped settings callback below. A bare
   // mount (zero routes) is the dormant posture: nothing registers until a

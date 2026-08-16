@@ -71,9 +71,16 @@ function scriptedFace(options: {
   baseProviders?: Record<string, unknown>
   /** Routes the adapter reports as hand-declared; the rest come back as shipped. */
   declaredRoutes?: readonly string[]
+  /** Auth methods the adapter reports per route, mirroring `llm.providers`. */
+  authMethodsByProvider?: Record<string, ('api-key' | 'oauth')[]>
+  /** The subscription login label per route, mirroring `llm.providers`. */
+  oauthLoginLabelByProvider?: Record<string, string>
   discover?: ReturnType<typeof vi.fn>
   mutate?: ReturnType<typeof vi.fn>
   set?: ReturnType<typeof vi.fn>
+  oauthBegin?: ReturnType<typeof vi.fn>
+  oauthPoll?: ReturnType<typeof vi.fn>
+  oauthCancel?: ReturnType<typeof vi.fn>
 } = {}) {
   const providers = options.providers ?? {
     openai: { apiKeyEnv: 'OPENAI_API_KEY', baseURL: 'https://proxy.example/v1' },
@@ -82,6 +89,14 @@ function scriptedFace(options: {
   const discover = options.discover ?? vi.fn(() => Promise.resolve(ok({ models: [] })))
   const mutate = options.mutate ?? vi.fn(() => Promise.resolve(ok(namespace)))
   const set = options.set ?? vi.fn(() => Promise.resolve(ok({})))
+  const oauthBegin = options.oauthBegin ?? vi.fn(() => Promise.resolve(ok({
+    id: 'flow-1',
+    userCode: 'ABCD-EFGH',
+    verificationUri: 'https://auth.example/device',
+    expiresInSeconds: 600,
+  })))
+  const oauthPoll = options.oauthPoll ?? vi.fn(() => Promise.resolve(ok({ status: 'pending' as const })))
+  const oauthCancel = options.oauthCancel ?? vi.fn(() => Promise.resolve(ok({})))
   const face = {
     llm: {
       providers: vi.fn(() => Promise.resolve(ok({
@@ -92,10 +107,19 @@ function scriptedFace(options: {
           settingsPath: ['providers', provider],
           active: true,
           declared: options.declaredRoutes?.includes(provider) ?? false,
+          ...options.authMethodsByProvider?.[provider] === undefined
+            ? {}
+            : { authMethods: options.authMethodsByProvider[provider] },
+          ...options.oauthLoginLabelByProvider?.[provider] === undefined
+            ? {}
+            : { oauthLoginLabel: options.oauthLoginLabelByProvider[provider] },
         })),
       }))),
       models: vi.fn(() => Promise.resolve(ok({ groups: [], failures: [] }))),
       discoverModels: discover,
+      oauthBegin,
+      oauthPoll,
+      oauthCancel,
     },
     settings: {
       describe: vi.fn(() => Promise.resolve(ok({ writable: true, namespaces: [namespace] }))),
@@ -111,7 +135,7 @@ function scriptedFace(options: {
       unset: vi.fn(),
     },
   }
-  return { face, discover, mutate, set, namespace }
+  return { face, discover, mutate, set, oauthBegin, oauthPoll, oauthCancel, namespace }
 }
 
 type WireFace = ConstructorParameters<typeof ModelsSettingsStore>[0]
@@ -1375,5 +1399,90 @@ describe('API key field', () => {
     await waitFor(() => { expect(mutate).toHaveBeenCalledOnce() })
     await waitFor(() => { expect(load).toHaveBeenCalledOnce() })
     expect(screen.queryByText(en.customTitle)).toBeNull()
+  })
+})
+
+describe('subscription login', () => {
+  it('offers the login only on a route the adapter reports as oauth-capable', async () => {
+    await mountSection({
+      providers: { xai: {}, openai: {} },
+      authMethodsByProvider: { xai: ['api-key', 'oauth'], openai: ['api-key'] },
+      oauthLoginLabelByProvider: { xai: 'Sign in with SuperGrok or X Premium' },
+    })
+    openEditor('xai')
+    expect(screen.getByText('Sign in with SuperGrok or X Premium')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en.oauthLogin })).toBeNull()
+
+    openEditor('openai')
+    expect(screen.queryByText('Sign in with SuperGrok or X Premium')).toBeNull()
+  })
+
+  it('names the derived reference and oauth auth, then runs the flow to success', async () => {
+    const oauthPoll = vi.fn(() => Promise.resolve(ok({ status: 'success' as const })))
+    const oauthCancel = vi.fn(() => Promise.resolve(ok({})))
+    const { mutate, oauthBegin, controller } = await mountSection({
+      providers: { xai: {} },
+      authMethodsByProvider: { xai: ['api-key', 'oauth'] },
+      oauthLoginLabelByProvider: { xai: 'Sign in with SuperGrok or X Premium' },
+      oauthPoll,
+      oauthCancel,
+    })
+    const load = vi.spyOn(controller, 'load')
+    openEditor('xai')
+
+    fireEvent.click(screen.getByText('Sign in with SuperGrok or X Premium'))
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    const write = firstMutate(mutate)
+    expect(write.ops).toEqual([
+      { op: 'set', path: ['providers', 'xai', 'apiKeyEnv'], value: 'XAI_API_KEY' },
+      { op: 'set', path: ['providers', 'xai', 'auth'], value: 'oauth' },
+    ])
+    await waitFor(() => { expect(oauthBegin).toHaveBeenCalled() })
+    expect(oauthBegin.mock.calls[0]?.[0]).toMatchObject({ settingsNs: 'llm-pi-ai', provider: 'xai' })
+
+    // The poll reports success and the dialog shows the connected state; the
+    // device code itself is exercised by the pending-flow test below.
+    await waitFor(() => { expect(screen.getByText(en.oauthSuccess)).toBeTruthy() })
+    // The dialog's own Apply, not the editor's behind the modal.
+    const dialog = screen.getByText('Sign in to xai').closest('[role="dialog"]') as HTMLElement
+    fireEvent.click(within_(dialog, en.apply))
+    await waitFor(() => { expect(load).toHaveBeenCalled() })
+    expect(oauthCancel).not.toHaveBeenCalled()
+  })
+
+  it('cancels the flow when the dialog is dismissed', async () => {
+    const oauthCancel = vi.fn(() => Promise.resolve(ok({})))
+    const oauthPoll = vi.fn(() => Promise.resolve(ok({ status: 'pending' as const })))
+    const { oauthBegin } = await mountSection({
+      providers: { xai: {} },
+      authMethodsByProvider: { xai: ['api-key', 'oauth'] },
+      oauthPoll,
+      oauthCancel,
+    })
+    openEditor('xai')
+    fireEvent.click(screen.getByRole('button', { name: en.oauthLogin }))
+    await waitFor(() => { expect(oauthBegin).toHaveBeenCalled() })
+    await waitFor(() => { expect(screen.getByText('ABCD-EFGH')).toBeTruthy() })
+
+    fireEvent.click(screen.getByText(en.oauthCancelLogin))
+    await waitFor(() => { expect(oauthCancel).toHaveBeenCalled() })
+    await waitFor(() => { expect(screen.queryByText('ABCD-EFGH')).toBeNull() })
+  })
+
+  it('shows the host failure and does not begin again', async () => {
+    const oauthBegin = vi.fn(() => Promise.resolve(fail('no subscription login for xai', 'oauth-begin-failed')))
+    const { mutate } = await mountSection({
+      providers: { xai: {} },
+      authMethodsByProvider: { xai: ['api-key', 'oauth'] },
+      oauthBegin,
+    })
+    openEditor('xai')
+    fireEvent.click(screen.getByRole('button', { name: en.oauthLogin }))
+    await waitFor(() => { expect(oauthBegin).toHaveBeenCalled() })
+    await waitFor(() => {
+      expect(screen.getByText(`${en.oauthFailed}: no subscription login for xai`)).toBeTruthy()
+    })
+    // The dialog stays closed after dismissal; no second begin is fired.
+    expect(mutate).toHaveBeenCalledTimes(1)
   })
 })

@@ -162,6 +162,34 @@ export function catalogProviderTakesApiKey(provider: string): boolean {
 }
 
 /**
+ * The subscription (OAuth) login flow the installed catalog provider for one
+ * route offers, when it offers one. The harness runs the flow itself and
+ * stores the resulting credential, so the request path can later exchange it
+ * for request auth through the same object.
+ * @param provider - provider route key.
+ * @returns the catalog provider's OAuth auth, or undefined for a route pi-ai
+ *   does not ship and for one whose only method is an API key.
+ */
+export function catalogProviderOAuth(provider: string): NonNullable<Provider['auth']['oauth']> | undefined {
+  return catalogProvider(provider)?.auth.oauth
+}
+
+/**
+ * Every authentication method the installed catalog provider for one route
+ * offers, in a stable order: `api-key` first when both exist, `oauth` after.
+ * @param provider - provider route key.
+ * @returns the offered methods; empty for a route pi-ai does not ship.
+ */
+export function catalogProviderAuthMethods(provider: string): readonly ('api-key' | 'oauth')[] {
+  const auth = catalogProvider(provider)?.auth
+  if (auth === undefined) return []
+  const methods: ('api-key' | 'oauth')[] = []
+  if (auth.apiKey !== undefined) methods.push('api-key')
+  if (auth.oauth !== undefined) methods.push('oauth')
+  return methods
+}
+
+/**
  * The installed catalog models for one route, indexed by model id.
  * @param provider - provider route key.
  * @returns catalog models by id; empty for a route pi-ai does not ship.
@@ -202,6 +230,16 @@ export interface PiAiCompatProfile {
 export interface PiAiModelProfile {
   /** Model id sent to the provider and accepted by {@link GenerateOptions.model}. */
   id: string
+  /**
+   * Wire protocol this model speaks. Absent keeps the installed catalog
+   * entry's protocol, then the route's `api`; a catalog route whose shipped
+   * models disagree (Responses beside Chat Completions) needs it on every
+   * model the catalog does not describe — the newest-release case where the
+   * route has no shared answer. Naming one beside a route-level `api` of a
+   * different value is refused, since the route's provider then speaks one
+   * protocol.
+   */
+  api?: string
   /** Display name for selectors; defaults to the catalog name, then the id. */
   name?: string
   /** Maximum combined request and response context in tokens. */
@@ -494,10 +532,14 @@ export function resolveRouteModels(request: RouteCatalogRequest): RouteCatalog {
     if (seen.has(entry.id)) invalid(provider, `lists model "${entry.id}" more than once`)
     seen.add(entry.id)
     const base = defaults.get(entry.id)
-    const api = request.api ?? base?.api ?? routeApi
+    if (entry.api !== undefined && request.api !== undefined && entry.api !== request.api) {
+      invalid(provider, `model "${entry.id}" names api "${entry.api}" beside a route api "${request.api}"; a route`
+        + ' speaks one protocol, so split the model onto its own route or align the two')
+    }
+    const api = entry.api ?? request.api ?? base?.api ?? routeApi
     if (api === undefined) {
       invalid(provider, `model "${entry.id}" needs an api; the installed catalog does not describe it, so set the`
-        + ' route\'s api to the wire protocol its endpoint speaks')
+        + " model's or the route's api to the wire protocol its endpoint speaks")
     }
     const baseUrl = request.baseURL ?? base?.baseUrl ?? providerBaseUrl
     if (baseUrl === undefined) {

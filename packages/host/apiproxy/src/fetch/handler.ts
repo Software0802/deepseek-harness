@@ -63,7 +63,11 @@ import {
 import {
   credentialsDescribeRequestSchema, credentialsSetRequestSchema, credentialsUnsetRequestSchema,
 } from '../api/credentials.schema.ts'
-import { llmDiscoverModelsRequestSchema, llmModelsRequestSchema, llmProvidersRequestSchema } from '../api/llm.schema.ts'
+import {
+  llmDiscoverModelsRequestSchema, llmModelsRequestSchema,
+  llmOauthBeginRequestSchema, llmOauthCancelRequestSchema, llmOauthPollRequestSchema,
+  llmProvidersRequestSchema,
+} from '../api/llm.schema.ts'
 import {
   subagentHistoryRequestSchema,
   subagentInterruptRequestSchema,
@@ -140,6 +144,9 @@ const UNARY_ROUTES: UnaryRoutes = {
   'llm.providers': { schema: llmProvidersRequestSchema, invoke: (api, r) => api.llm.providers(r) },
   'llm.models': { schema: llmModelsRequestSchema, invoke: (api, r) => api.llm.models(r) },
   'llm.discoverModels': { schema: llmDiscoverModelsRequestSchema, invoke: (api, r, signal) => api.llm.discoverModels(r, signal) },
+  'llm.oauthBegin': { schema: llmOauthBeginRequestSchema, invoke: (api, r, signal) => api.llm.oauthBegin(r, signal) },
+  'llm.oauthPoll': { schema: llmOauthPollRequestSchema, invoke: (api, r) => api.llm.oauthPoll(r) },
+  'llm.oauthCancel': { schema: llmOauthCancelRequestSchema, invoke: (api, r) => api.llm.oauthCancel(r) },
 }
 
 /** Route lookup that narrows an arbitrary path segment to a map key (single cast point for the string→key refinement). */

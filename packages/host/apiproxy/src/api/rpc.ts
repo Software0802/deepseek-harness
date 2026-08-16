@@ -86,6 +86,17 @@ export interface RpcErrorDetailsMap {
    * details name the endpoint asked, never the credential offered.
    */
   'model-discovery-failed': { settingsNs: string; baseURL?: string }
+  /**
+   * Beginning a subscription (OAuth) login failed: no adapter family serves
+   * the namespace, the route has no profile or no subscription login, or the
+   * provider refused the device-authorization request. The message is the
+   * adapter's own text; the details name the route asked, never a credential.
+   */
+  'oauth-begin-failed': { settingsNs: string; provider: string }
+  /** Polling a begun subscription login failed (unknown flow id). */
+  'oauth-poll-failed': { settingsNs: string }
+  /** Cancelling a begun subscription login failed (unknown flow id). */
+  'oauth-cancel-failed': { settingsNs: string }
   'title-invalid': { sessionId: SessionId }
   'fork-unavailable': { sessionId: SessionId }
   'subagent-parent-unavailable': { parentSessionId: SessionId }

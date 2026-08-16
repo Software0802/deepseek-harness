@@ -159,6 +159,14 @@ function scriptedFace(overrides: {
         ],
       }))),
       models: vi.fn(() => Promise.resolve(ok({ groups: [], failures: [] }))),
+      discoverModels: vi.fn(() => Promise.resolve(ok({ models: [] }))),
+      oauthBegin: vi.fn(() => Promise.resolve(ok({
+        id: 'flow-1',
+        userCode: 'ABCD-EFGH',
+        verificationUri: 'https://auth.example/device',
+      }))),
+      oauthPoll: vi.fn(() => Promise.resolve(ok({ status: 'pending' as const }))),
+      oauthCancel: vi.fn(() => Promise.resolve(ok({}))),
     },
     settings: {
       describe: vi.fn(() => Promise.resolve(ok({ writable: true, hasDocument: false, namespaces: wireNamespaces() }))),

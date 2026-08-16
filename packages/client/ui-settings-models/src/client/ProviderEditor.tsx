@@ -30,6 +30,7 @@ import {
 import {
   DeepSeekModelsEditor, modelDrafts, validateDeepSeekModels,
 } from './DeepSeekModelsEditor.tsx'
+import { OAuthLoginDialog } from './OAuthLoginDialog.tsx'
 import { apiKeyFailure } from './apiKey.ts'
 import { EditorFooter } from './EditorFooter.tsx'
 import { ModelListEditor } from './ModelListEditor.tsx'
@@ -59,6 +60,14 @@ export interface ProviderEditorProps {
    * override every one of them and the card does not offer it.
    */
   declared?: boolean
+  /**
+   * The authentication methods the owning adapter reports for this route.
+   * `oauth` opens the subscription login when present; absent offers only the
+   * API-key field.
+   */
+  authMethods?: readonly ('api-key' | 'oauth')[]
+  /** The subscription login's own label, when the adapter shipped one. */
+  oauthLoginLabel?: string
   /** The owning namespace view (schema, layers, secrets). */
   namespace: SettingsNamespaceView
   /** Path from the section root to this provider's profile. */
@@ -149,6 +158,8 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const [keyState, setKeyState] = useState<CredentialView | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
+  const [loginOpen, setLoginOpen] = useState(false)
+  const [loginBusy, setLoginBusy] = useState(false)
   // A settings success advances both retry baselines immediately. Keeping the
   // derived fields in the draft prevents a pushed namespace refresh from
   // turning them into deletions when the following credential write is retried.
@@ -306,6 +317,48 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     }
   }
 
+  /**
+   * Begin the subscription login: first make the profile name this page's
+   * derived reference and the oauth auth — the flow stores its credential
+   * under that reference, and the request path refreshes it from there — then
+   * open the dialog that runs the flow. The mutate is the same minimal path-op
+   * discipline as {@link applyOnce}: only the fields this card observes.
+   */
+  const beginLogin = async (): Promise<void> => {
+    setLoginBusy(true)
+    setFailure(undefined)
+    try {
+      const resolved = getPath(namespace.value, settingsPath)
+      const resolvedProfile = typeof resolved === 'object' && resolved !== null
+        ? resolved as Record<string, unknown>
+        : {}
+      const ops: SettingsPathOpView[] = []
+      if (resolvedProfile.apiKeyEnv !== keyRef) {
+        ops.push({ op: 'set', path: [...settingsPath, 'apiKeyEnv'], value: keyRef })
+      }
+      if (resolvedProfile.auth !== 'oauth') {
+        ops.push({ op: 'set', path: [...settingsPath, 'auth'], value: 'oauth' })
+      }
+      if (ops.length > 0) {
+        const response = await api.settings.mutate({ ns: namespace.ns, ops, expectedRevision })
+        if (!response.result.ok) {
+          setFailure(response.result.error.code === 'settings-conflict'
+            ? t('conflict')
+            : response.result.error.message)
+          return
+        }
+        setCommittedOriginal(getPath(response.result.value.user, settingsPath))
+        setExpectedRevision(response.result.value.revision)
+        setDraft(current => ({ ...current, apiKeyEnv: keyRef, auth: 'oauth' }))
+      }
+      setLoginOpen(true)
+    } catch (error) {
+      setFailure(messageOf(error))
+    } finally {
+      setLoginBusy(false)
+    }
+  }
+
   if (node === undefined) {
     // A directory entry addressing a position its schema cannot resolve is a
     // host-side inconsistency; showing it beats a blank card.
@@ -376,6 +429,20 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
           />
           {shownKeyFailure === undefined ? null : <p className={styles['error']}>{t(shownKeyFailure)}</p>}
         </div>
+        {family === 'pi-ai' && props.authMethods?.includes('oauth') === true
+          ? (
+            <div className={styles['field']}>
+              <button
+                type="button"
+                className={styles['oauthButton']}
+                disabled={disabled || loginBusy}
+                onClick={() => { void beginLogin() }}
+              >
+                {props.oauthLoginLabel ?? t('oauthLogin')}
+              </button>
+            </div>
+          )
+          : null}
         {props.credentialOnly === true ? null : <details className={styles['customized']}>
           <summary className={styles['customizedSummary']}>{t('customized')}</summary>
           <div className={styles['customizedBody']}>
@@ -503,6 +570,24 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
         onCancel={() => { props.onClose(false) }}
         onSubmit={() => { void apply() }}
       />
+      {loginOpen
+        ? (
+          <OAuthLoginDialog
+            settingsNs={namespace.ns}
+            provider={props.provider}
+            displayName={props.displayName}
+            {...props.oauthLoginLabel === undefined ? {} : { oauthLoginLabel: props.oauthLoginLabel }}
+            api={api}
+            t={t}
+            onClose={(changed) => {
+              setLoginOpen(false)
+              // A committed login renames the stored credential the card
+              // manages, so the editor closes with `changed` like a key save.
+              if (changed) props.onClose(true)
+            }}
+          />
+        )
+        : null}
     </div>
   )
 }

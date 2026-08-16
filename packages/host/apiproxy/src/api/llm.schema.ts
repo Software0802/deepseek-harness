@@ -17,6 +17,8 @@ export const configurableProviderViewSchema = z.object({
   settingsPath: z.array(z.string()),
   active: z.boolean(),
   declared: z.boolean().optional(),
+  authMethods: z.array(z.union([z.literal('api-key'), z.literal('oauth')])).optional(),
+  oauthLoginLabel: z.string().min(1).optional(),
 }) satisfies z.ZodType<Wire<ConfigurableProviderView>>
 
 /** llm.providers request payload. */
@@ -62,3 +64,39 @@ export const llmDiscoverModelsRequestSchema = z.object({
 export const llmDiscoverModelsValueSchema = z.object({
   models: z.array(discoveredModelViewSchema),
 }) satisfies z.ZodType<Wire<ResponseValue<'llm.discoverModels'>>>
+
+/** llm.oauthBegin request payload. */
+export const llmOauthBeginRequestSchema = z.object({
+  settingsNs: z.string().min(1),
+  provider: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'llm.oauthBegin'>>>
+
+/** llm.oauthBegin response value. */
+export const llmOauthBeginValueSchema = z.object({
+  id: z.string().min(1),
+  userCode: z.string().min(1),
+  verificationUri: z.string().min(1),
+  expiresInSeconds: z.number().int().positive().optional(),
+}) satisfies z.ZodType<Wire<ResponseValue<'llm.oauthBegin'>>>
+
+/** llm.oauthPoll request payload. */
+export const llmOauthPollRequestSchema = z.object({
+  settingsNs: z.string().min(1),
+  id: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'llm.oauthPoll'>>>
+
+/** llm.oauthPoll response value. */
+export const llmOauthPollValueSchema = z.union([
+  z.object({ status: z.literal('pending') }),
+  z.object({ status: z.literal('success') }),
+  z.object({ status: z.literal('failed'), error: z.string() }),
+]) satisfies z.ZodType<Wire<ResponseValue<'llm.oauthPoll'>>>
+
+/** llm.oauthCancel request payload. */
+export const llmOauthCancelRequestSchema = z.object({
+  settingsNs: z.string().min(1),
+  id: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'llm.oauthCancel'>>>
+
+/** llm.oauthCancel response value. */
+export const llmOauthCancelValueSchema = z.object({}) satisfies z.ZodType<Wire<ResponseValue<'llm.oauthCancel'>>>

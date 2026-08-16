@@ -22,6 +22,7 @@ import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
 import type { ResolvedRetryPolicy, RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
 import { MODALITIES, resolveRouteModels, SUPPORTED_THINKING_FORMATS, THINKING_LEVELS } from './catalog.ts'
+import { catalogProviderAuthMethods, catalogProviderOAuth } from './catalog.ts'
 import type {
   PiAiCompatProfile,
   PiAiModality,
@@ -65,6 +66,14 @@ export type {
 export interface PiAiProviderProfile {
   /** Credential reference (environment-variable name) resolved per request through `ctx.credentials`. */
   apiKeyEnv?: string
+  /**
+   * How this route authenticates. `api-key` stores a key under {@link apiKeyEnv}
+   * and is the default for a route whose catalog offers one; `oauth` runs the
+   * catalog provider's subscription login and stores its credential under
+   * {@link apiKeyEnv}, which `oauth` requires. A route whose catalog offers no
+   * subscription login cannot choose `oauth`.
+   */
+  auth?: 'api-key' | 'oauth'
   /** Name shown by configuration surfaces; defaults to the route key. */
   displayName?: string
   /**
@@ -142,11 +151,18 @@ export interface PiAiProviderProfile {
 
 /** Validated profile with its route stamped and every adapter-owned default resolved. */
 export interface ResolvedPiAiProviderProfile
-  extends Omit<PiAiProviderProfile, 'apiKeyEnv' | 'retryPolicy' | 'models' | 'displayName'> {
+  extends Omit<PiAiProviderProfile, 'apiKeyEnv' | 'retryPolicy' | 'models' | 'displayName' | 'auth'> {
   /** Harness route key and the `Models` collection key (the configuration dict key). */
   provider: string
   /** Resolved display name for selectors and configuration surfaces. */
   displayName: string
+  /**
+   * How this route authenticates, after defaulting: `api-key` unless the
+   * catalog provider offers only a subscription login. The request path
+   * honors a stored subscription credential either way, so a login run while
+   * the profile still said `api-key` keeps working.
+   */
+  auth: 'api-key' | 'oauth'
   /** Validated credential reference, when one is configured. */
   apiKeyEnv?: CredentialRef
   /** Positive finite provider-idle interval after defaulting. */
@@ -207,6 +223,7 @@ const reasoningEfforts = z.dict(
 
 /** The fields a `models` entry and a `modelOverrides` value share; only the id's home differs. */
 const modelFields = {
+  api: z.union(supportedProtocols()),
   name: z.string(),
   contextWindow: z.number().step(1).min(1),
   maxTokens: z.number().step(1).min(1),
@@ -231,6 +248,7 @@ const modelOverride: z<PiAiModelOverride> = z.object(modelFields)
 
 const profile = z.object({
   apiKeyEnv: z.string().role('credential-ref'),
+  auth: z.union(['api-key', 'oauth']),
   displayName: z.string(),
   api: z.union(supportedProtocols()),
   baseURL: z.string(),
@@ -315,6 +333,28 @@ export function resolveProfiles(
     if (source.displayName !== undefined && source.displayName.length === 0) {
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
     }
+    // The route's authentication method, defaulted from what the catalog
+    // provider offers: a route whose only method is a subscription login is
+    // oauth by default, everything else is api-key (the conservative choice —
+    // a stored key never surprises, a subscription login always does).
+    const auth = source.auth ?? (catalogProviderAuthMethods(provider).includes('oauth')
+      && !catalogProviderAuthMethods(provider).includes('api-key')
+      ? 'oauth'
+      : 'api-key')
+    if (auth === 'oauth') {
+      if (catalogProviderOAuth(provider) === undefined) {
+        throw new Error(
+          `llm-pi-ai: provider "${provider}" sets auth oauth, but its catalog entry offers no subscription login;`
+          + ' configure a route the catalog can authenticate, or store an API key instead',
+        )
+      }
+      if (source.apiKeyEnv === undefined || source.apiKeyEnv.length === 0) {
+        throw new Error(
+          `llm-pi-ai: provider "${provider}" sets auth oauth, which needs an apiKeyEnv to store the`
+          + ' subscription credential under; name one, or store an API key instead',
+        )
+      }
+    }
     const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
     if (!Number.isFinite(streamIdleTimeoutMs)
       || streamIdleTimeoutMs <= 0
@@ -352,6 +392,7 @@ export function resolveProfiles(
       ...rest,
       provider,
       displayName,
+      auth,
       ...apiKeyEnv === undefined ? {} : { apiKeyEnv: credentialRef(apiKeyEnv) },
       streamIdleTimeoutMs,
       retryPolicy: resolveRetryPolicy(retryPolicy, `llm-pi-ai: provider "${provider}" retryPolicy`),

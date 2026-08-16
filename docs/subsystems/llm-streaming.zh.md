@@ -780,6 +780,45 @@ registerModelDiscovery( settingsNs: string, discover: (request: LlmModelDiscover
 async discoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, ): Promise<LlmDiscoveredModel[]>
 
 /**
+ * Offer subscription (OAuth) login flows for the settings namespace this
+ * plugin owns, alongside its model discovery. The namespace is the key
+ * because that is what a configuration surface already holds from the
+ * configurable-provider directory: `oauthBegin` dispatches to the owning
+ * family and the family resolves the exact route's own provider flow.
+ * Disposed with the fiber.
+ * @param settingsNs - the namespace whose provider routes these flows serve.
+ * @param flows - begins, polls, and cancels one login each by opaque id.
+ * @returns the disposer that withdraws the offer.
+ */
+registerOAuthFlows( settingsNs: string, flows: LlmOAuthFlows, ): () => void
+
+/**
+ * Begin one subscription login for a provider route served by the flows
+ * registered for a settings namespace.
+ * @param settingsNs - the namespace whose flows serve the route.
+ * @param provider - the route to authenticate.
+ * @param signal - optional cancellation for the begin step (transport
+ *   disconnect); the flow itself keeps running until polled or cancelled.
+ * @returns the flow id and device code to display to the user.
+ */
+async oauthBegin( settingsNs: string, provider: string, signal?: AbortSignal, ): Promise<LlmOAuthBeginResult>
+
+/**
+ * Read the live state of one begun subscription login.
+ * @param settingsNs - the namespace whose flows own the flow.
+ * @param id - the flow id returned by {@link LlmRuntime.oauthBegin}.
+ * @returns pending, success, or failed-with-message.
+ */
+async oauthPoll(settingsNs: string, id: string): Promise<LlmOAuthStatus>
+
+/**
+ * Abort one begun subscription login.
+ * @param settingsNs - the namespace whose flows own the flow.
+ * @param id - the flow id returned by {@link LlmRuntime.oauthBegin}.
+ */
+oauthCancel(settingsNs: string, id: string): void
+
+/**
  * Resolve the retry policy captured when one provider route was registered.
  * @param provider - registered provider route to inspect.
  * @returns the provider-owned policy, with normal defaults already resolved.
@@ -841,7 +880,7 @@ async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<Prepared
 stream(options: GenerateOptions): AsyncIterable<StreamChunk>
 ```
 
-Source: [`packages/llm/llm/src/index.ts:284`](../../packages/llm/llm/src/index.ts)
+Source: [`packages/llm/llm/src/index.ts:287`](../../packages/llm/llm/src/index.ts)
 
 <a id="llm-events"></a>
 
@@ -890,5 +929,5 @@ Waterfall around every streaming model call (retry, replay, routing). Bound to t
 'llm/stream'(this: LlmRuntime, options: GenerateOptions, next: () => AsyncIterable<StreamChunk>): AsyncIterable<StreamChunk>
 ```
 
-Source: [`packages/llm/llm/src/index.ts:64`](../../packages/llm/llm/src/index.ts)
+Source: [`packages/llm/llm/src/index.ts:67`](../../packages/llm/llm/src/index.ts)
 <!-- END GENERATED cordis-surface -->

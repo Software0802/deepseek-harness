@@ -15,6 +15,9 @@ import type {
   LlmModelContext,
   LlmModelDiscoveryRequest,
   LlmModelInfo,
+  LlmOAuthBeginResult,
+  LlmOAuthFlows,
+  LlmOAuthStatus,
   LlmResolvedModelInfo,
   LlmProviderInfo,
   ModelModality,
@@ -288,6 +291,7 @@ export class LlmRuntime extends Service {
     string,
     (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>
   >()
+  private oauth = new Map<string, LlmOAuthFlows>()
 
   constructor(ctx: Context) {
     super(ctx, 'llm')
@@ -556,6 +560,90 @@ export class LlmRuntime extends Service {
       })
     }
     return models
+  }
+
+  /**
+   * Offer subscription (OAuth) login flows for the settings namespace this
+   * plugin owns, alongside its model discovery. The namespace is the key
+   * because that is what a configuration surface already holds from the
+   * configurable-provider directory: `oauthBegin` dispatches to the owning
+   * family and the family resolves the exact route's own provider flow.
+   * Disposed with the fiber.
+   * @param settingsNs - the namespace whose provider routes these flows serve.
+   * @param flows - begins, polls, and cancels one login each by opaque id.
+   * @returns the disposer that withdraws the offer.
+   */
+  registerOAuthFlows(
+    settingsNs: string,
+    flows: LlmOAuthFlows,
+  ): () => void {
+    const dispose = this.ctx.effect(function* (this: LlmRuntime) {
+      if (settingsNs.length === 0) {
+        throw new LlmError('OAuth flows need a non-empty settings namespace', 'INVALID_OAUTH')
+      }
+      if (this.oauth.has(settingsNs)) {
+        throw new LlmError(`OAuth flows for "${settingsNs}" are already registered`, 'DUPLICATE_OAUTH')
+      }
+      this.oauth.set(settingsNs, flows)
+      yield () => {
+        this.oauth.delete(settingsNs)
+      }
+    }.bind(this), 'llm.registerOAuthFlows()')
+    return () => void dispose()
+  }
+
+  /** The flows registered for one settings namespace, or the not-owned failure. */
+  private oauthFlowsOf(settingsNs: string): LlmOAuthFlows {
+    const flows = this.oauth.get(settingsNs)
+    if (flows === undefined) {
+      throw new LlmError(`no OAuth flows are registered for "${settingsNs}"`, 'NO_OAUTH_FLOWS')
+    }
+    return flows
+  }
+
+  /**
+   * Begin one subscription login for a provider route served by the flows
+   * registered for a settings namespace.
+   * @param settingsNs - the namespace whose flows serve the route.
+   * @param provider - the route to authenticate.
+   * @param signal - optional cancellation for the begin step (transport
+   *   disconnect); the flow itself keeps running until polled or cancelled.
+   * @returns the flow id and device code to display to the user.
+   */
+  async oauthBegin(
+    settingsNs: string,
+    provider: string,
+    signal?: AbortSignal,
+  ): Promise<LlmOAuthBeginResult> {
+    if (provider.length === 0) {
+      throw new LlmError('OAuth login needs a provider route', 'INVALID_OAUTH')
+    }
+    return this.oauthFlowsOf(settingsNs).begin(provider, signal)
+  }
+
+  /**
+   * Read the live state of one begun subscription login.
+   * @param settingsNs - the namespace whose flows own the flow.
+   * @param id - the flow id returned by {@link LlmRuntime.oauthBegin}.
+   * @returns pending, success, or failed-with-message.
+   */
+  async oauthPoll(settingsNs: string, id: string): Promise<LlmOAuthStatus> {
+    if (id.length === 0) {
+      throw new LlmError('OAuth polling needs a flow id', 'INVALID_OAUTH')
+    }
+    return this.oauthFlowsOf(settingsNs).poll(id)
+  }
+
+  /**
+   * Abort one begun subscription login.
+   * @param settingsNs - the namespace whose flows own the flow.
+   * @param id - the flow id returned by {@link LlmRuntime.oauthBegin}.
+   */
+  oauthCancel(settingsNs: string, id: string): void {
+    if (id.length === 0) {
+      throw new LlmError('OAuth cancellation needs a flow id', 'INVALID_OAUTH')
+    }
+    this.oauthFlowsOf(settingsNs).cancel(id)
   }
 
   /**

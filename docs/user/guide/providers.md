@@ -16,7 +16,13 @@ Keys are write-only. The page receives a redacted descriptor after saving, never
 
 Choose **Add provider**, select a provider such as Anthropic or OpenAI, enter its API key, and save. The installed catalog supplies the endpoint, protocol, and model list.
 
-Providers with native authentication need their native credentials instead. Bedrock, Vertex, Azure, and Codex use AWS credentials and a region, an ADC project, an `api-version`, and OAuth respectively; filling only the API-key field does not configure them.
+Providers with native authentication need their native credentials instead. Bedrock, Vertex, and Azure use AWS credentials and a region, an ADC project, and an `api-version` respectively; filling only the API-key field does not configure them.
+
+### Sign in with a subscription
+
+Some catalog providers also offer a subscription login — xAI's Grok supports signing in with **SuperGrok or X Premium**. Open the provider's card and choose the sign-in button (for Grok it reads "Sign in with SuperGrok or X Premium"). A dialog shows a code and an authorization link: open the link, enter the code, and approve. The dialog reports when the subscription is connected, and the provider's models (for Grok: `grok-4.3`, `grok-4.5`, `grok-build-0.1`) become usable immediately.
+
+The credential the login stores is refreshed automatically when a request finds it expired. You can still store an API key for the same provider — both paths share the card's credential field, and the sign-in replaces whatever key was stored before.
 
 ## Add a custom provider
 

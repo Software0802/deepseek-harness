@@ -2961,6 +2961,17 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       discoverModels: request => ok(request, {
         models: fixtureModelGroups().flatMap(group => group.models.map(model => ({ id: model.id, name: model.name }))),
       }),
+      // Subscription logins are host-side flows; the fixture answers the
+      // device step and reports success, enough for a surface to exercise the
+      // login dialog without a real provider.
+      oauthBegin: request => ok(request, {
+        id: 'fixture-oauth-flow',
+        userCode: 'FIX-1234',
+        verificationUri: 'https://auth.example/device',
+        expiresInSeconds: 600,
+      }),
+      oauthPoll: request => ok(request, { status: 'pending' as const }),
+      oauthCancel: request => ok(request, {}),
     },
     respond(message: ClientResponse): Promise<RpcReceipt> {
       // Same routing discipline as the host: rpcId first, then the payload's
@@ -3129,6 +3140,9 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'llm.providers': return this.api.llm.providers(request)
       case 'llm.models': return this.api.llm.models(request)
       case 'llm.discoverModels': return this.api.llm.discoverModels(request, signal)
+      case 'llm.oauthBegin': return this.api.llm.oauthBegin(request, signal)
+      case 'llm.oauthPoll': return this.api.llm.oauthPoll(request)
+      case 'llm.oauthCancel': return this.api.llm.oauthCancel(request)
     }
   }
 

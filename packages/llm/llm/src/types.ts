@@ -184,6 +184,75 @@ export interface LlmConfigurableProvider {
    * from outside.
    */
   declared?: boolean
+  /**
+   * The authentication methods this route can be set up with, when the
+   * owning adapter can say: `api-key` for a stored key through the
+   * credential seam, `oauth` for a subscription (OAuth) login the adapter
+   * runs. Absent means the adapter draws no such distinction and surfaces
+   * offer only the API-key entry.
+   */
+  authMethods?: readonly LlmOAuthMethod[]
+  /**
+   * The selector label of the subscription login this route offers (for
+   * example "Sign in with SuperGrok or X Premium"), when it offers one.
+   * Surface copy falls back to a generic label when absent.
+   */
+  oauthLoginLabel?: string
+}
+
+/** One authentication method a configurable provider route may support. */
+export type LlmOAuthMethod = 'api-key' | 'oauth'
+
+/** One device-authorization step of a subscription (OAuth) login. */
+export interface LlmOAuthDeviceCode {
+  /** The human-readable code the user types on the authorization page. */
+  userCode: string
+  /** The page the user opens to authorize the login. */
+  verificationUri: string
+  /** How long the code stays valid, when the provider says so. */
+  expiresInSeconds?: number
+}
+
+/** A begun subscription login: the flow id plus the device code to show. */
+export interface LlmOAuthBeginResult extends LlmOAuthDeviceCode {
+  /** Opaque flow id for {@link LlmOAuthFlows.poll} and {@link LlmOAuthFlows.cancel}. */
+  id: string
+}
+
+/** Live state of one begun subscription login, until it settles. */
+export type LlmOAuthStatus =
+  | { status: 'pending' }
+  | { status: 'success' }
+  | { status: 'failed'; error: string }
+
+/**
+ * The login flows one adapter family offers for its settings namespace:
+ * begin one subscription login, then poll or cancel it by id. The flow owns
+ * the credential write — a successful login is stored before `poll` ever
+ * reports success — so a request that resolves the same reference right
+ * after sees the new credential without another step.
+ */
+export interface LlmOAuthFlows {
+  /**
+   * Start one subscription login for a provider route this family owns.
+   * @param provider - the route to authenticate.
+   * @param signal - optional external cancellation (transport disconnect).
+   * @returns the flow id and the device code to display.
+   */
+  begin(provider: string, signal?: AbortSignal): Promise<LlmOAuthBeginResult>
+  /**
+   * Read the live state of one begun flow. `pending` while the user has not
+   * authorized yet; `success` once the credential is durably stored;
+   * `failed` with a message once the flow is over either way.
+   * @param id - the flow id returned by {@link LlmOAuthFlows.begin}.
+   */
+  poll(id: string): Promise<LlmOAuthStatus>
+  /**
+   * Abort one begun flow. A cancelled flow settles `failed`; polling after
+   * cancellation keeps returning that terminal state.
+   * @param id - the flow id returned by {@link LlmOAuthFlows.begin}.
+   */
+  cancel(id: string): void
 }
 
 /**
