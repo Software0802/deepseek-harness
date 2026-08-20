@@ -38,7 +38,7 @@ class ThrowingAdapter extends LlmAdapter {
   }
 
   async * stream(): AsyncIterable<StreamChunk> {
-    throw new Error('reviewer boom')
+    throw 'reviewer boom'
   }
 }
 
@@ -149,6 +149,35 @@ describe('transcript helpers', () => {
     completeTurn(session, 1)
     expect(transcriptForTurn(session, 1)).toBe('User: hello\n\nAssistant: done')
     expect(transcriptForTurn(session, 2)).toBe('')
+    session.append('turn/start', { turn: 3 })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: '   ' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    session.append('assistant/message', {
+      turn: 3,
+      step: 1,
+      message: createMessage({
+        role: 'assistant',
+        content: [{ type: 'text', text: '' }],
+        source: { kind: 'model', provider: 'mock', model: 'mock' },
+      }),
+    }, { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'hello' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    session.append('assistant/message', {
+      turn: 3,
+      step: 2,
+      message: createMessage({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'done' }],
+        source: { kind: 'model', provider: 'mock', model: 'mock' },
+      }),
+    }, { surfaceOp: 'append' })
+    session.append('turn/end', { turn: 3, reason: { kind: 'completed' } })
+    expect(transcriptForTurn(session, 3)).toBe('User: hello\n\nAssistant: done')
   })
 
   it('keeps a transcript that already fits and truncates from the end', () => {
@@ -403,7 +432,7 @@ describe('omp-advisor plugin', () => {
     const ctx2 = await startAdvisor()
     ctx2.logger.warn = warn2 as never
     vi.spyOn(ctx2.agents, 'withoutInitiator').mockImplementation(() => {
-      throw new Error('agent initiator scope is disposed')
+      throw 'agent initiator scope is disposed'
     })
     const { session: session2 } = stubAgent(ctx2, 'scope')
     completeTurn(session2, 1)
