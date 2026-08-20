@@ -1421,6 +1421,60 @@ export interface Config {
 
 Source: [`packages/feedback/message-feedback/src/index.ts:49`](../packages/feedback/message-feedback/src/index.ts)
 
+<a id="deepseek-aidsh-omp-advisor"></a>
+
+## `@deepseek-ai/dsh-omp-advisor`
+
+Requires: `agents` · `llm`
+
+```ts config-catalog
+/**
+ * Plugin config. `enabled` defaults false so installing the bundle does not
+ * spend tokens until a deployment supplies `provider` and `model`.
+ */
+export interface Config {
+  /** When false, the plugin loads and reviews nothing (default). */
+  enabled?: boolean
+  /** Provider route for the reviewer model; required when `enabled` is true. */
+  provider?: string
+  /** Model id for the reviewer; required when `enabled` is true. */
+  model?: string
+  /** Reviewer call timeout in milliseconds (default `30000`). */
+  timeoutMs?: number
+  /** Reviewer `maxTokens` (default `256`). */
+  maxOutputTokens?: number
+  /** Byte cap on the turn transcript sent to the reviewer (default `8192`). */
+  maxTranscriptBytes?: number
+  /** When true, also review sessions whose header origin is `subagent`. */
+  includeSubagents?: boolean
+  /** `inject` never wakes the agent; `interrupt` followups on blocker notes. */
+  delivery?: 'inject' | 'interrupt'
+  /** Maximum blocker followups per agent lifecycle (default `3`). */
+  maxInterrupts?: number
+}
+```
+
+Source: [`packages/omp/omp-advisor/src/index.ts:34`](../packages/omp/omp-advisor/src/index.ts)
+
+<a id="deepseek-aidsh-omp-loop"></a>
+
+## `@deepseek-ai/dsh-omp-loop`
+
+Requires: `agents` · `commands`
+
+```ts config-catalog
+/**
+ * Plugin config. `maxIterations` is the inclusive cap for one run; a command
+ * count above it fails at dispatch rather than clamping.
+ */
+export interface Config {
+  /** Inclusive iteration cap for one `/loop` run (default `20`). */
+  maxIterations?: number
+}
+```
+
+Source: [`packages/omp/omp-loop/src/index.ts:31`](../packages/omp/omp-loop/src/index.ts)
+
 <a id="deepseek-aidsh-permission-presets"></a>
 
 ## `@deepseek-ai/dsh-permission-presets`
@@ -3302,6 +3356,7 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@deepseek-ai/dsh-llm-mock-server` ([`packages/test-support/llm-mock-server/src/index.ts`](../packages/test-support/llm-mock-server/src/index.ts))
 - `@deepseek-ai/dsh-loader-smoke` ([`packages/test-support/loader-smoke/src/index.ts`](../packages/test-support/loader-smoke/src/index.ts))
 - `@deepseek-ai/dsh-native-command` ([`packages/util/native-command/src/index.ts`](../packages/util/native-command/src/index.ts))
+- `@deepseek-ai/dsh-omp` ([`packages/bundle/omp/src/index.ts`](../packages/bundle/omp/src/index.ts))
 - `@deepseek-ai/dsh-output-retention` ([`packages/util/output-retention/src/index.ts`](../packages/util/output-retention/src/index.ts))
 - `@deepseek-ai/dsh-sandbox-windows-acl` ([`packages/sandbox/sandbox-windows-acl/src/index.ts`](../packages/sandbox/sandbox-windows-acl/src/index.ts))
 - `@deepseek-ai/dsh-scope` ([`packages/core/scope/src/index.ts`](../packages/core/scope/src/index.ts))

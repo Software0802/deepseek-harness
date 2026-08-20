@@ -26,6 +26,7 @@ packages/    @deepseek-ai/dsh-<pkg> workspaces at packages/<group>/<pkg>/
   compaction/     compaction capability + basic provider
   context/     request-context plugins
   subagent/    subagent capability: Service Definition + providers + delegation Consumers
+  omp/         Oh My Pi extensions as plugins: cataloged official packages plus loop and advisor
   bundle/      installable dsh --profile patch-layer bundles
   workflow/    workflow capability + worker-thread provider + tool Consumer
   todo/        todo_write tool
@@ -149,3 +150,16 @@ Docs accompany every code change: update affected README and JSDoc contracts tog
 ## Vendoring policy
 
 `vendor/` packages are pinned source copies (manifest with upstream SHAs in [vendor/README.md](vendor/README.md)). Update via the sync procedure there; re-apply or retire the logged local modifications; rerun `pnpm run test && pnpm run build`.
+
+## Fork layout
+
+`master` mirrors official DeepSeek Harness only. Fork work on `cursor/omp-plugin-library-4812` is opt-in OMP plugins for `dsh web` / `dsh` headless, plus these Cloud VM notes, and must not merge into `master`. This fork does not ship an Electron Desktop. [Decision](.agents/notes/implemented/process/2026-08-20-fork-official-master-and-plugin-branch.md).
+
+## Cursor Cloud specific instructions
+
+These cover only the Cursor Cloud VM; standard commands stay in [Commands](#commands).
+
+- **Node pin:** the engine floor is Node `^22.19 || >=24`, but the VM's default `node` on `PATH` is `22.14`, on which `tsdown` cannot load its config (`unrun` import fails) and the build/typecheck abort. A supported `v22.22.2` is symlinked into `/usr/local/cargo/bin`, which `~/.bashrc` places first on `PATH`; if `node -v` reports below the floor, recreate it with `ln -sf ~/.nvm/versions/node/v22.22.2/bin/{node,npm,npx,corepack} /usr/local/cargo/bin/`.
+- **`CI=true` is exported in `~/.bashrc` and required for pnpm here:** the `postinstall` Lefthook installer refuses to run because Cursor owns git `core.hooksPath`, and that failure otherwise breaks `pnpm install` and every `pnpm run <script>` (pnpm verifies dependencies before a script). The installer and the repo's own CI both skip on `CI=true`, and the worktree-local git hooks are unneeded in cloud.
+- **Run the Web UI keylessly:** `pnpm dsh web` serves the browser UI at `http://127.0.0.1:3080`; a live agent turn needs `DEEPSEEK_API_KEY` (and optional `DEEPSEEK_BASE_URL`). Without a key, drive it against the scriptable mock — start `pnpm mock:llm --sequence success --repeat-last --success-text "hello" --port 8090`, then boot with `DEEPSEEK_API_KEY=x DEEPSEEK_BASE_URL=http://127.0.0.1:8090/v1`. `pnpm run test:snapshot` exercises the assembled agent loop keylessly by replay.
+- **Known flaky:** `packages/typert/generator/tests/cordis-catalog.spec.ts` can fail on a clean tree because a generated source line-number reference is non-deterministic across runs; it is unrelated to environment setup.

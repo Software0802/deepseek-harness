@@ -125,6 +125,8 @@ New behavior attaches to a documented extension point. Changing the loop itself 
 | Add durable session state | extend `SessionEventMap`; render and replay from the log |
 | Generate session titles | register the sole `ctx.sessionTitle` provider |
 | Manage a same-session objective | use `ctx.goals`; continue through `agent/*` |
+| Repeat one prompt for a count or duration | mount `@deepseek-ai/dsh-omp-loop` |
+| Review each completed turn with a second model | mount `@deepseek-ai/dsh-omp-advisor` |
 | Fork a live session | `ctx.sessions.fork(source, boundary?, childSessionId?)` |
 | Scope a registration to one agent | use that agent's `agent.ctx` |
 

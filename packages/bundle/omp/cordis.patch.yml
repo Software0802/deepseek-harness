@@ -1,0 +1,21 @@
+# The dsh-omp bundle patch: OMP-inspired loop and advisor plugins over dsh-base.
+# Goal, Ralph, plan, skill, and repeat-tool reminders already mount in dsh-base;
+# this layer does not copy those packages. Advisor stays disabled until a
+# deployment supplies provider and model.
+
+- insert:
+    - id: omp-loop
+      name: '@deepseek-ai/dsh-omp-loop'
+      config:
+        maxIterations: 20
+
+    - id: omp-advisor
+      name: '@deepseek-ai/dsh-omp-advisor'
+      config:
+        enabled: false
+        timeoutMs: 30000
+        maxOutputTokens: 256
+        maxTranscriptBytes: 8192
+        includeSubagents: false
+        delivery: inject
+        maxInterrupts: 3
