@@ -377,7 +377,7 @@ describe('omp-advisor plugin', () => {
     session2.append('turn/start', { turn: 1 })
     session2.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     session2.append('turn/start', { turn: 2 })
-    session2.append('turn/end', { turn: 2, reason: { kind: 'aborted' } })
+    session2.append('turn/end', { turn: 2, reason: { kind: 'aborted', reason: { kind: 'user' } } })
     await new Promise(resolve => setTimeout(resolve, 50))
     expect(inject2).not.toHaveBeenCalled()
     await ctx2.fiber.dispose()

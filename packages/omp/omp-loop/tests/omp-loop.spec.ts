@@ -114,7 +114,7 @@ describe('loop prompt renderer', () => {
     const content = renderLoopPrompt(parts)
     expect(parseLoopPrompt(content)).toEqual(parts)
     expect(parseLoopPrompt([])).toBeUndefined()
-    expect(parseLoopPrompt([{ type: 'image', source: { kind: 'base64', mediaType: 'image/png', data: '' } }])).toBeUndefined()
+    expect(parseLoopPrompt([{ type: 'reasoning', text: 'not a loop prompt' }])).toBeUndefined()
     expect(parseLoopPrompt([{ type: 'text', text: 'not a loop prompt' }])).toBeUndefined()
     expect(parseLoopPrompt([{ type: 'text', text: 'Loop iteration 1/2.\nOriginal task:\n' }])).toBeUndefined()
   })
@@ -341,7 +341,7 @@ describe('omp-loop driver races', () => {
     expect((await run(test, ' 2 keep going')).kind).toBe('success')
     await Promise.resolve()
     emitAgentEvent(test.ctx, test.agent, 'agent/inbox/claimed', { message: queued!, turn: 1 })
-    test.session.append('turn/end', { turn: 1, reason: { kind: 'aborted' } })
+    test.session.append('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } })
     emitAgentEvent(test.ctx, test.agent, 'agent/status', { status: 'idle' })
     expect((await run(test)).text).toContain('Status: stopped')
 
@@ -355,7 +355,7 @@ describe('omp-loop driver races', () => {
     queued = undefined
     expect((await run(test, ' 2 keep going')).kind).toBe('success')
     await Promise.resolve()
-    test.session.append('turn/end', { turn: 1, reason: { kind: 'aborted' } })
+    test.session.append('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } })
     expect((await run(test)).text).toContain('Status: stopped')
 
     queued = undefined
@@ -375,7 +375,7 @@ describe('omp-loop driver races', () => {
     expect((await run(test)).text).toContain('Status: running')
 
     const orphan = test.ctx.sessions.create(SessionId('orphan-loop'))
-    orphan.append('turn/end', { turn: 1, reason: { kind: 'aborted' } })
+    orphan.append('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } })
     expect((await run(test)).text).toContain('Status: running')
 
     test.session.append('user/message', createUserMessage({
