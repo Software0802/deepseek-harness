@@ -42,6 +42,7 @@
         "headless-agent/tests/fixtures/subagent-settlement-fence.ts",
         "headless-agent/tests/fixtures/workspace-context-resume-agent.ts",
         "headless-agent/tests/fixtures/goal-domain/seed-goal.ts",
+        "headless-agent/tests/fixtures/omp-loop/seed-loop.ts",
         "headless-agent/tests/fixtures/time-context-driver.ts",
         "headless-agent/tests/fixtures/time-context-mock-llm.ts",
         "headless-agent/tests/fixtures/session-telemetry-otel-driver.ts",
@@ -441,6 +442,25 @@
         "tests/**/*.ts"
       ]
     },
+    "packages/omp/omp-loop": {
+      "entry": [
+        "tests/**/*.spec.ts",
+        "tests/**/*.e2e.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "tests/**/*.ts"
+      ]
+    },
+    "packages/omp/omp-advisor": {
+      "entry": [
+        "tests/**/*.spec.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "tests/**/*.ts"
+      ]
+    },
     "packages/session-query/session-query-sqlite": {
       "entry": [
         "tests/**/*.spec.ts",
@@ -771,6 +791,19 @@
     "packages/bundle/base": {
       "ignoreDependencies": [
         "@deepseek-ai/.+"
+      ]
+    },
+    "packages/bundle/omp": {
+      "entry": [
+        "tests/**/*.spec.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "tests/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@deepseek-ai/dsh-omp-advisor",
+        "@deepseek-ai/dsh-omp-loop"
       ]
     },
     "packages/bundle/headless": {

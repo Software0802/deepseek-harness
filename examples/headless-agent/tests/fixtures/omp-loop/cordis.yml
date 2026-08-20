@@ -1,0 +1,40 @@
+# Test-only composition: start an OMP-style /loop after the first completed turn.
+- id: cli-mock-llm
+  name: '../cli-mock-llm.ts'
+
+- id: subprocess
+  name: '@deepseek-ai/dsh-subprocess-local'
+
+- id: bash
+  name: '@deepseek-ai/dsh-bash-local'
+
+- id: commands
+  name: '@deepseek-ai/dsh-commands'
+
+- id: omp-loop
+  name: '@deepseek-ai/dsh-omp-loop'
+  config:
+    maxIterations: 4
+
+- id: seed-loop
+  name: './seed-loop.ts'
+
+- id: agent-spine
+  name: '@deepseek-ai/dsh-agent-spine-demo'
+  config:
+    agents:
+      - id: main
+        provider: cli-mock
+        model: cli-mock
+        cwd: !!js process.cwd()
+    persona: 'Test the OMP loop plugin.'
+    workspaceContext: false
+
+- id: persistence
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: './.sessions'
+    compression: none
+
+- id: checkpoint-policy
+  name: '@deepseek-ai/dsh-session-checkpoint-policy'
