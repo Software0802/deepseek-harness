@@ -48,3 +48,4 @@ advisor 审阅是旁路的 `ctx.llm.stream` 调用。它不是会话事件。只
 - [人类 `/goal` 命令](2026-07-19-human-goal-command.md)
 - [Profile 插件组合包](../architecture/2026-08-05-profile-plugin-bundles.md)
 - [Harness 级循环](2026-07-16-harness-level-loop.md)
+- [仅保留官方提交的 master 与承载 fork 产品的插件分支](../process/2026-08-20-fork-official-master-and-plugin-branch.md)

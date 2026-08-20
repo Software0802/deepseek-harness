@@ -149,6 +149,10 @@ Docs accompany every code change: update affected README and JSDoc contracts tog
 
 `vendor/` packages are pinned source copies (manifest with upstream SHAs in [vendor/README.md](vendor/README.md)). Update via the sync procedure there; re-apply or retire the logged local modifications; rerun `pnpm run test && pnpm run build`.
 
+## Fork layout
+
+`master` mirrors official DeepSeek Harness only. Fork Cordis plugins, Desktop (Electron host plus Studio UI plugins), Host patches, and these Cloud VM notes live on `cursor/omp-plugin-library-4812` and must not merge into `master`. Desktop's window process is an application host, not a Cordis plugin; [the fork-layout decision](.agents/notes/implemented/process/2026-08-20-fork-official-master-and-plugin-branch.md) owns the split.
+
 ## Cursor Cloud specific instructions
 
 These cover only the Cursor Cloud VM; standard commands stay in [Commands](#commands).
