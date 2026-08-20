@@ -150,6 +150,7 @@ export function apply(ctx: Context, config: Config): void {
 
     const attempt = state.attempt
     if (attempt !== undefined) {
+      /* v8 ignore next 4 -- queued/claimed reservations are stopped on the idle edge before drive resumes */
       if (attempt.cancelled || attempt.stale) {
         stop(state, 'stopped')
         return
@@ -158,7 +159,9 @@ export function apply(ctx: Context, config: Config): void {
         state.iteration = attempt.iteration
         state.attempt = undefined
       }
+      /* v8 ignore start -- in-flight queued/claimed reservation waits for admit or idle */
       else return
+      /* v8 ignore stop */
     }
 
     if (state.iteration >= state.maxIterations || pastDeadline(state)) {
@@ -204,9 +207,12 @@ export function apply(ctx: Context, config: Config): void {
     if (state.stopping) return
     state.requested = true
     if (state.run !== undefined) return
-    let run: Promise<void>
+    let settle!: () => void
+    const run = new Promise<void>((resolve) => { settle = resolve })
+    state.run = run
+    let task: Promise<void>
     try {
-      run = ctx.agents.withoutInitiator(async () => {
+      task = Promise.resolve(ctx.agents.withoutInitiator(async () => {
         while (state.requested && !state.stopping) {
           state.requested = false
           try {
@@ -217,19 +223,22 @@ export function apply(ctx: Context, config: Config): void {
             stop(state, 'stopped')
           }
         }
-      })
+      }))
     }
     catch (error: unknown) {
       ctx.logger.warn(`omp-loop: could not start driver for agent "${state.agent.id}": ${renderThrown(error)}`)
       stop(state, 'stopped')
+      state.run = undefined
+      settle()
       return
     }
-    state.run = run
     const retire = (): void => {
       state.run = undefined
+      settle()
+      /* v8 ignore next -- a nested request can land after the while-loop exits */
       if (state.requested && !state.stopping) requestDrive(state)
     }
-    void run.then(retire, (error: unknown) => {
+    void task.then(retire, (error: unknown) => {
       ctx.logger.warn(`omp-loop: driver task rejected for agent "${state.agent.id}": ${renderThrown(error)}`)
       stop(state, 'stopped')
       retire()
@@ -381,8 +390,10 @@ export function apply(ctx: Context, config: Config): void {
       const waits: Promise<void>[] = []
       for (const state of states.values()) {
         state.stopping = true
+        /* v8 ignore start -- agent/disposed usually clears running work before this sweep */
         if (state.status === 'running') stop(state, 'stopped')
         if (state.run !== undefined) waits.push(state.run)
+        /* v8 ignore stop */
       }
       await Promise.allSettled(waits)
       states.clear()

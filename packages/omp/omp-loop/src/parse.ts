@@ -55,7 +55,9 @@ export function parseLoopCommand(rawInput: string): LoopCommand {
   if (input.length === 0) return { kind: 'status' }
   const control = input.toLowerCase()
   if (control === 'stop') return { kind: 'stop' }
-  const first = input.split(/\s+/u)[0] ?? ''
+  const first = input.split(/\s+/u)[0]
+  /* v8 ignore next -- trim() plus a non-empty input always yields a first token */
+  if (first === undefined) return { kind: 'status' }
   const prompt = input.slice(first.length).trim()
   const promptText = prompt.length === 0 ? undefined : prompt
   if (first.toLowerCase() === 'stop') {
@@ -70,10 +72,15 @@ export function parseLoopCommand(rawInput: string): LoopCommand {
   }
   const duration = DURATION.exec(first)
   if (duration !== null) {
-    const digits = duration[1] ?? ''
+    const digits = duration[1]
+    const unit = duration[2]
+    /* v8 ignore start -- DURATION always captures both groups when it matches */
+    if (digits === undefined || unit === undefined) {
+      return { kind: 'invalid', message: `duration must be a positive integer with unit ms, s, m, or h.\n${LOOP_USAGE}` }
+    }
+    /* v8 ignore stop */
     const count = Number(digits)
-    const unit = duration[2] ?? ''
-    if (!Number.isSafeInteger(count) || count < 1 || unit.length === 0 || String(count) !== digits) {
+    if (!Number.isSafeInteger(count) || count < 1 || String(count) !== digits) {
       return { kind: 'invalid', message: `duration must be a positive integer with unit ms, s, m, or h.\n${LOOP_USAGE}` }
     }
     return { kind: 'start', iterations: undefined, durationMs: durationMs(count, unit), prompt: promptText }

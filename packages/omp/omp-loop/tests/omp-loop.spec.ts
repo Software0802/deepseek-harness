@@ -145,6 +145,10 @@ describe('/loop command', () => {
 
     const idleStop = await run(test, ' stop')
     expect(idleStop.text).toContain('No running loop to stop')
+
+    const invalid = await run(test, ' nope')
+    expect(invalid).toMatchObject({ kind: 'error' })
+    expect(invalid.text).toContain('a count or duration is required')
   })
 
   it('rejects a count above maxIterations and a missing prompt', async () => {
@@ -171,7 +175,7 @@ describe('/loop command', () => {
     }), { surfaceOp: 'append' })
     test.session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: 'plugin noise' }],
-      source: { kind: 'plugin', plugin: LOOP_PLUGIN },
+      source: { kind: 'plugin', plugin: 'other-plugin' },
     }), { surfaceOp: 'append' })
     const started = await run(test, ' 1')
     expect(started.text).toContain('from history')
@@ -185,7 +189,7 @@ describe('/loop command', () => {
     }), { surfaceOp: 'append' })
     test.session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: 'plugin only' }],
-      source: { kind: 'plugin', plugin: LOOP_PLUGIN },
+      source: { kind: 'plugin', plugin: 'other-plugin' },
     }), { surfaceOp: 'append' })
     const missing = await run(test, ' 1')
     expect(missing).toMatchObject({ kind: 'error' })
@@ -214,7 +218,7 @@ describe('/loop command', () => {
   })
 
   it('stops when followup throws', async () => {
-    const test = await commandHarness(() => { throw new Error('queue failed') })
+    const test = await commandHarness(() => { throw 'queue failed' })
     const started = await run(test, ' 1 boom')
     expect(started.kind).toBe('success')
     await Promise.resolve()
@@ -326,6 +330,8 @@ describe('omp-loop driver races', () => {
     test.agent.inbox.append('next-turn', competing)
     emitAgentEvent(test.ctx, test.agent, 'agent/inbox/inserted', { message: competing })
     expect((await run(test)).text).toContain('Status: stopped')
+    emitAgentEvent(test.ctx, test.agent, 'agent/status', { status: 'idle' })
+    expect((await run(test)).text).toContain('Status: stopped')
 
     expect((await run(test, ' 2 keep going')).kind).toBe('success')
     emitAgentEvent(test.ctx, test.agent, 'agent/session-start', { source: 'clear' })
@@ -372,6 +378,25 @@ describe('omp-loop driver races', () => {
     orphan.append('turn/end', { turn: 1, reason: { kind: 'aborted' } })
     expect((await run(test)).text).toContain('Status: running')
 
+    test.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'unrelated user' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+
+    const other = createUserMessage({
+      content: [{ type: 'text', text: 'other inbox message' }],
+      source: { kind: 'user' },
+    })
+    emitAgentEvent(test.ctx, test.agent, 'agent/inbox/claimed', { message: other, turn: 1 })
+    emitAgentEvent(test.ctx, test.agent, 'agent/inbox/discarded', { message: other })
+    expect((await run(test)).text).toContain('Status: running')
+    emitAgentEvent(test.ctx, test.agent, 'agent/inbox/claimed', { message: own, turn: 1 })
+    test.agent.inbox.append('next-turn', other)
+    emitAgentEvent(test.ctx, test.agent, 'agent/inbox/inserted', { message: other })
+    expect((await run(test)).text).toContain('Status: stopped')
+    emitAgentEvent(test.ctx, test.agent, 'agent/inbox/inserted', { message: competing })
+    expect((await run(test)).text).toContain('Status: stopped')
+
     emitAgentEvent(test.ctx, test.agent, 'agent/status', { status: 'running' })
     emitAgentEvent(test.ctx, test.agent, 'agent/disposed', {})
     await test.ctx.fiber.dispose()
@@ -380,13 +405,12 @@ describe('omp-loop driver races', () => {
   it('completes when the duration elapses and stops when the driver cannot start', async () => {
     let queued: ReturnType<typeof createUserMessage> | undefined
     const test = await commandHarness((message) => { queued = message })
-    const started = await run(test, ' 1ms keep going')
+    const started = await run(test, ' 50ms keep going')
     expect(started.kind).toBe('success')
     expect(started.text).toContain('Deadline:')
-    await Promise.resolve()
-    expect(queued).toBeDefined()
+    await vi.waitFor(() => expect(queued).toBeDefined())
     test.session.append('user/message', queued!, { surfaceOp: 'append' })
-    await new Promise(resolve => setTimeout(resolve, 20))
+    await new Promise(resolve => setTimeout(resolve, 60))
     emitAgentEvent(test.ctx, test.agent, 'agent/status', { status: 'idle' })
     await vi.waitFor(async () => {
       expect((await run(test)).text).toContain('Status: complete')
@@ -413,23 +437,24 @@ describe('omp-loop driver races', () => {
     await rejected.ctx.fiber.dispose()
 
     let reentered = 0
+    let nested: ReturnType<typeof createUserMessage> | undefined
     const busy = await commandHarness((message) => {
       reentered += 1
-      void message
+      nested = message
       if (reentered === 1) {
+        busy.session.append('user/message', message, { surfaceOp: 'append' })
         emitAgentEvent(busy.ctx, busy.agent, 'agent/status', { status: 'idle' })
       }
     })
     expect((await run(busy, ' 2 keep going')).kind).toBe('success')
-    await Promise.resolve()
+    await vi.waitFor(() => expect(nested).toBeDefined())
     expect((await run(busy)).text).toMatch(/Status: (running|stopped|complete)/)
     await busy.ctx.fiber.dispose()
 
     const clockQueued: { current?: ReturnType<typeof createUserMessage> } = {}
     const clock = await commandHarness((message) => { clockQueued.current = message })
     expect((await run(clock, ' 1s keep going')).kind).toBe('success')
-    await Promise.resolve()
-    expect(clockQueued.current).toBeDefined()
+    await vi.waitFor(() => expect(clockQueued.current).toBeDefined())
     clock.session.append('user/message', clockQueued.current!, { surfaceOp: 'append' })
     const warn = vi.fn()
     clock.ctx.logger.warn = warn as never
@@ -465,5 +490,22 @@ describe('omp-loop driver races', () => {
     const status = await ctx.commands.execute(agent, '/loop', new AbortController().signal)
     expect(status?.result.text).toMatch(/Status: (stopped|complete)|No loop is currently set/)
     await ctx.fiber.dispose()
+  })
+
+  it('stops a running loop when the plugin unloads with a driver task in flight', async () => {
+    const test = await commandHarness()
+    expect((await run(test, ' 5 keep going')).kind).toBe('success')
+    expect((await run(test)).text).toContain('Status: running')
+    await test.ctx.fiber.dispose()
+
+    const held = await commandHarness()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    vi.spyOn(held.ctx.agents, 'withoutInitiator').mockImplementation(() => gate)
+    expect((await run(held, ' 1 keep going')).kind).toBe('success')
+    const disposing = held.ctx.fiber.dispose()
+    await new Promise(resolve => setTimeout(resolve, 20))
+    release()
+    await disposing
   })
 })
