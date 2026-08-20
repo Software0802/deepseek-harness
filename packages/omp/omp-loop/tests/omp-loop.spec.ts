@@ -65,6 +65,7 @@ async function run(test: Stub, suffix = ''): Promise<NonNullable<Awaited<ReturnT
   const execution = await test.ctx.commands.execute(
     test.agent,
     `/loop${suffix}`,
+    [],
     new AbortController().signal,
   )
   if (execution === undefined) throw new Error('loop command was not registered')
@@ -158,11 +159,11 @@ describe('/loop command', () => {
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(OmpLoop, { maxIterations: 2 })
     const agent = stubAgent(ctx, 'cap')
-    const over = await ctx.commands.execute(agent, '/loop 3 too many', new AbortController().signal)
+    const over = await ctx.commands.execute(agent, '/loop 3 too many', [], new AbortController().signal)
     expect(over?.result).toMatchObject({ kind: 'error' })
     expect(over?.result.text).toContain('maxIterations')
 
-    const missing = await ctx.commands.execute(agent, '/loop 1', new AbortController().signal)
+    const missing = await ctx.commands.execute(agent, '/loop 1', [], new AbortController().signal)
     expect(missing?.result).toMatchObject({ kind: 'error' })
     expect(missing?.result.text).toContain('a prompt is required')
   })
@@ -203,7 +204,7 @@ describe('/loop command', () => {
     await ctx.plugin(AgentRegistry)
     const agent = stubAgent(ctx, 'already-there')
     await ctx.plugin(OmpLoop)
-    const execution = await ctx.commands.execute(agent, '/loop 1 prove preexisting', new AbortController().signal)
+    const execution = await ctx.commands.execute(agent, '/loop 1 prove preexisting', [], new AbortController().signal)
     expect(execution?.result.kind).toBe('success')
     await ctx.fiber.dispose()
   })
@@ -242,6 +243,7 @@ describe('omp-loop continuation through the agent loop', () => {
     const execution = await ctx.commands.execute(
       agent,
       '/loop 2 finish the catalog',
+      [],
       new AbortController().signal,
     )
     expect(execution?.result.kind).toBe('success')
@@ -481,13 +483,14 @@ describe('omp-loop driver races', () => {
     const execution = await ctx.commands.execute(
       agent,
       '/loop 2 hang then stop',
+      [],
       new AbortController().signal,
     )
     expect(execution?.result.kind).toBe('success')
     await new Promise(resolve => setTimeout(resolve, 20))
     agent.cancel({ kind: 'user' })
     await idle
-    const status = await ctx.commands.execute(agent, '/loop', new AbortController().signal)
+    const status = await ctx.commands.execute(agent, '/loop', [], new AbortController().signal)
     expect(status?.result.text).toMatch(/Status: (stopped|complete)|No loop is currently set/)
     await ctx.fiber.dispose()
   })

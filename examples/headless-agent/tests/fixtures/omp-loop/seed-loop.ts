@@ -16,6 +16,6 @@ export function apply(ctx: Context): void {
     const agent = ctx.agents.get(session.id)
     if (agent === undefined) return
     seeded = true
-    void ctx.commands.execute(agent, '/loop 2 continue the catalog', new AbortController().signal)
+    void ctx.commands.execute(agent, '/loop 2 continue the catalog', [], new AbortController().signal)
   })
 }

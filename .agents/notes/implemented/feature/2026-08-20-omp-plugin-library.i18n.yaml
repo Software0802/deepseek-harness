@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-20-omp-plugin-library.md
-2026-08-20-omp-plugin-library.md: 3f541f7dc597fd9d2bc162e6854163974fab482b
-2026-08-20-omp-plugin-library.zh.md: 8dfbaeba8c991c95f42f8b3a8150468e81842209
+2026-08-20-omp-plugin-library.md: 07ece3fa42a01aac3d54f8df0af4bf8c9f3e92dc
+2026-08-20-omp-plugin-library.zh.md: a804db89429d5d11afc76b17cb54a1f14137c017

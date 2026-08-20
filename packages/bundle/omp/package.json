@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-omp",
   "description": "OMP plugin library bundle: cataloged Oh My Pi extensions as dsh plugins, composing official packages and mounting loop plus advisor",
-  "version": "0.1.0-rc.5",
+  "version": "0.1.0-rc.8",
   "publishConfig": {
     "access": "public"
   },

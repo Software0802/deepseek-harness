@@ -48,3 +48,4 @@ Package suites use the real command registry, session log, invariant service, an
 - [Human `/goal` command](2026-07-19-human-goal-command.md)
 - [Profile plugin bundles](../architecture/2026-08-05-profile-plugin-bundles.md)
 - [Harness-level loop](2026-07-16-harness-level-loop.md)
+- [Official-only master and web-only plugin branch](../process/2026-08-20-fork-official-master-and-plugin-branch.md)

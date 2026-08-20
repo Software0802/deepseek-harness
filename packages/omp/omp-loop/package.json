@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-omp-loop",
   "description": "OMP-style /loop command: repeat one prompt for a count or duration without completion semantics",
-  "version": "0.1.0-rc.5",
+  "version": "0.1.0-rc.8",
   "publishConfig": {
     "access": "public"
   },
