@@ -28,7 +28,7 @@ maybe('Imagine real API', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
-    await ctx.plugin(ToolImagine, { apiKey, outputDir })
+    await ctx.plugin(ToolImagine, { apiKey: apiKey!, outputDir })
     const result = await ctx.tools.execute({
       signal: new AbortController().signal,
       callId: CallId('imagine-e2e'),
