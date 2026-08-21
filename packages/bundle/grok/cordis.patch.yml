@@ -1,0 +1,18 @@
+# The dsh-grok bundle patch: Grok Imagine media tools and monitor over dsh-base.
+# Official Grok-equivalent tools (fs, bash, web, plan, goal, jobs, workflow,
+# skill, …) already mount in dsh-base; this layer does not copy those packages.
+
+- insert:
+    - id: grok-tool-imagine
+      name: '@deepseek-ai/dsh-tool-imagine'
+      config:
+        imageModel: grok-imagine-image
+        videoModel: grok-imagine-video
+        pollIntervalMs: 2000
+        pollTimeoutMs: 600000
+
+    - id: grok-tool-monitor
+      name: '@deepseek-ai/dsh-tool-monitor'
+      config:
+        graceMs: 5000
+        timeoutMs: 36000000

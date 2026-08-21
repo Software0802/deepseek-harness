@@ -110,6 +110,7 @@ Every product feature maps to a listener on a documented extension point — the
 | AGENTS.md (root) | a section provider reading the file |
 | AGENTS.md (subdir, on-touch) + file-change notices | `agent.inject()` from a watcher / tool-result listener |
 | Built-in tools | `ctx.tools.register()`; schemas flow into the assembly automatically — the `dsh-tool-*` families (bash, fs, web, subagent, todo) are the shipped examples |
+| Grok Imagine / monitor | mount [`@deepseek-ai/dsh-grok`](../../packages/bundle/grok/README.md); Imagine tools persist generated media, and `monitor` follow-ups each stdout line |
 | ToolSearch / progressive disclosure | replace a scoped `ctx.tools.restrict()` registration as the visible set changes; the registry keeps presentation, lookup, and execution aligned |
 | Tool deadline / retry / metrics | wrap core dispatch with `tools/execute`; a wrapper may replace `exec.signal`, delegate, and inspect the normalized result in one lexical lifetime |
 | Final tool-result metrics / audit / capture | observe immutable authoritative outcomes with `tools/result`; use `tools/post-execute` instead only when the plugin must transform the result or attach context |

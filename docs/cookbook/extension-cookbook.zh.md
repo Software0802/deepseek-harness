@@ -112,6 +112,7 @@ export function apply(ctx: Context) {
 | AGENTS.md（根目录） | 一个读取该文件的 section 提供方 |
 | AGENTS.md（子目录，按需触发）+ 文件变更通知 | 从 watcher / 工具结果监听器调用 `agent.inject()` |
 | 内置工具 | `ctx.tools.register()`；schema 自动流入装配——`dsh-tool-*` 系列（bash、fs、web、subagent、todo）是已交付的示例 |
+| Grok Imagine / monitor | 挂载 [`@deepseek-ai/dsh-grok`](../../packages/bundle/grok/README.md)；Imagine 工具持久化生成的媒体，`monitor` 对 stdout 每一行做 follow-up |
 | ToolSearch / 渐进式披露 | 当可见集变化时替换一个作用域化的 `ctx.tools.restrict()` 注册；注册表保持展示、查找和执行三者对齐 |
 | 工具截止时间 / 重试 / 指标 | 用 `tools/execute` 包裹核心分发；包装层可替换 `exec.signal`、委托执行，并在同一词法生命周期内检视规范化结果 |
 | 最终工具结果指标 / 审计 / 捕获 | 用 `tools/result` 观察不可变的权威结果；仅当插件需要变换结果或附加上下文时才使用 `tools/post-execute` |

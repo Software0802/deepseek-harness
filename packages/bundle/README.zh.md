@@ -11,5 +11,6 @@ Bundle 身份由 manifest 声明决定，而不是由本目录决定。领域包
 | [`base/`](base/README.md) | 每个 profile 最先应用的共享 dsh 核心 | —（仅 patch） |
 | [`web-app/`](web-app/README.md) | 浏览器表层：web patch 层 + 运行时粘合插件 | 挂载多条配置行 |
 | [`headless/`](headless/README.md) | 直接运行在 base 之上的一次性任务模式，不含 Host 或 Web 层 | 挂载 `headless-runner` |
+| [`grok/`](grok/README.md) | Grok Build 插件库：目录加上覆盖 base 的 Imagine 与 monitor 行 | 挂载 `grok-tool-imagine`、`grok-tool-monitor` |
 
 内置组合包从 dsh 安装目录解析；树外（out-of-tree）组合包通过 `dsh plugin --profile <name> add <package>` 安装进 profile。

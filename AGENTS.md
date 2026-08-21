@@ -26,6 +26,7 @@ packages/    @deepseek-ai/dsh-<pkg> workspaces at packages/<group>/<pkg>/
   compaction/     compaction capability + basic provider
   context/     request-context plugins
   subagent/    subagent capability: Service Definition + providers + delegation Consumers
+  grok/        opt-in Grok Build plugins: Imagine media tools and monitor
   bundle/      installable dsh --profile patch-layer bundles
   workflow/    workflow capability + worker-thread provider + tool Consumer
   todo/        todo_write tool
@@ -56,6 +57,10 @@ website/     VitePress projection of selected bilingual docs/ sources
 ```
 
 Package groups: [packages/README.md](packages/README.md).
+
+## Fork layout
+
+`master` mirrors official DeepSeek Harness only. Work on `grok` is the opt-in Grok Build plugin library for `dsh web` / `dsh` headless and must not merge into `master`. [Decision](.agents/notes/implemented/feature/2026-08-21-grok-build-plugin-library.md).
 
 ## Commands
 

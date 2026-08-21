@@ -1,0 +1,50 @@
+# Test-only composition: grok Imagine + monitor over a spine that also mounts
+# one official tool (todo_write) so unique names can be asserted.
+- id: grok-mock-llm
+  name: './grok-mock-llm.ts'
+
+- id: subprocess
+  name: '@deepseek-ai/dsh-subprocess-local'
+
+- id: jobs
+  name: '@deepseek-ai/dsh-jobs-local'
+
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
+
+- id: grok-tool-imagine
+  name: '@deepseek-ai/dsh-tool-imagine'
+  config:
+    apiKey: test-key
+    outputDir: ./media
+
+- id: grok-tool-monitor
+  name: '@deepseek-ai/dsh-tool-monitor'
+  config:
+    graceMs: 5000
+    timeoutMs: 5000
+
+- id: agent-spine
+  name: '@deepseek-ai/dsh-agent-spine-demo'
+  config:
+    agents:
+      - id: main
+        provider: grok-mock
+        model: grok-mock
+        cwd: !!js process.cwd()
+    persona: 'Test the grok plugin layer.'
+    workspaceContext: false
+
+- id: persistence
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: './.sessions'
+    compression: none
+
+- id: checkpoint-policy
+  name: '@deepseek-ai/dsh-session-checkpoint-policy'
