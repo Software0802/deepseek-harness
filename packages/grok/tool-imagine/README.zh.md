@@ -6,7 +6,7 @@
 
 缺少 `$XAI_API_KEY` / `config.apiKey` 不是加载失败：工具仍然注册，以便 grok 层组合可以无密钥启动，执行时抛出 `Imagine credentials missing: set XAI_API_KEY or plugin config apiKey`。HTTP 和空载荷失败是结构化的 `ImagineError`。
 
-`baseURL` 默认为 `https://api.x.ai/v1`。测试把它指向本地 mock。视频调用 POST `/videos/generations`，当响应体只有 `request_id` 时轮询 `GET /videos/{id}`，直到出现媒体或 `pollTimeoutMs` 到期。
+`baseURL` 默认为 `https://api.x.ai/v1`。测试把它指向本地 mock。`image_gen` POST `/images/generations`；`image_edit` POST `/images/edits`，载荷为 `{ image: { url } }`。视频调用 POST `/videos/generations`，预设音色使用 `reference_audios: [{ voice_id }]`，当响应体只有 `request_id` 时轮询 `GET /videos/{id}`，直到出现媒体或 `pollTimeoutMs` 到期。
 
 ## Configuration
 

@@ -6,7 +6,7 @@ Model-facing xAI Imagine tools over a mockable HTTP client. The plugin registers
 
 Missing `$XAI_API_KEY` / `config.apiKey` is not a load failure: the tools stay registered so a grok-layer composition can boot keylessly, and execute throws `Imagine credentials missing: set XAI_API_KEY or plugin config apiKey`. HTTP and empty-payload failures are structured `ImagineError`s.
 
-`baseURL` defaults to `https://api.x.ai/v1`. Tests point it at a local mock. Video calls POST `/videos/generations` and, when the body carries only a `request_id`, poll `GET /videos/{id}` until media is present or `pollTimeoutMs` elapses.
+`baseURL` defaults to `https://api.x.ai/v1`. Tests point it at a local mock. `image_gen` POSTs `/images/generations`; `image_edit` POSTs `/images/edits` with `{ image: { url } }`. Video calls POST `/videos/generations` with `reference_audios: [{ voice_id }]` for preset voices, and when the body carries only a `request_id`, poll `GET /videos/{id}` until media is present or `pollTimeoutMs` elapses.
 
 ## Configuration
 

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/grok/tool-imagine/README.md
-README.md: a905cb22252c59d59f84b4a2b562793803027794
-README.zh.md: bf70d27cb480ac104c86df724842dc5ef07a568b
+README.md: 964d46042b8cf8a30eded13f1658bdfa0c33866c
+README.zh.md: 5d84b6a47165a62560a7abc5ad2585019f534711

@@ -146,7 +146,7 @@ export class ImagineClient {
     if (request.image === undefined || request.image.length === 0) {
       throw new ImagineError('IMAGINE_INVALID_ARGS', 'image_edit requires a non-empty image')
     }
-    return this.runImage('generations', {
+    return this.runImage('edits', {
       model: this.options.imageModel,
       prompt: request.prompt,
       image: imageRef(request.image),
@@ -189,14 +189,14 @@ export class ImagineClient {
       model: this.options.videoModel,
       prompt: request.prompt,
       ...images.length > 0 ? { reference_images: images.map(imageRef) } : {},
-      ...voices.length > 0 ? { voices } : {},
+      ...voices.length > 0 ? { reference_audios: voices.map(voice_id => ({ voice_id })) } : {},
       ...request.duration !== undefined ? { duration: request.duration } : {},
       ...request.aspectRatio !== undefined ? { aspect_ratio: request.aspectRatio } : {},
       ...request.resolution !== undefined ? { resolution: request.resolution } : {},
     }, signal)
   }
 
-  private async runImage(operation: 'generations', body: JsonObject, signal?: AbortSignal): Promise<string> {
+  private async runImage(operation: 'generations' | 'edits', body: JsonObject, signal?: AbortSignal): Promise<string> {
     const payload = extractImaginePayload(await this.post(`/images/${operation}`, body, signal))
     return this.persistPayload(payload, '.png', signal)
   }

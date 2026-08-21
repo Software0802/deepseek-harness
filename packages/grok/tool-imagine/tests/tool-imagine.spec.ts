@@ -141,7 +141,10 @@ describe('dsh-tool-imagine', () => {
     expect(result.isError).toBe(false)
     if (result.isError) throw new Error('expected image_edit success')
     expect((await readFile((result.value as { path: string }).path)).byteLength).toBeGreaterThan(0)
-    expect(server.requests[0]?.body).toContain('"image"')
+    expect(server.requests[0]?.url).toBe('/images/edits')
+    expect(JSON.parse(server.requests[0]!.body) as { image?: unknown }).toMatchObject({
+      image: { url: `data:image/png;base64,${PNG_B64}` },
+    })
   })
 
   it('downloads image_to_video bytes from a returned URL', async () => {
@@ -210,6 +213,12 @@ describe('dsh-tool-imagine', () => {
     if (result.isError) throw new Error('expected reference_to_video success')
     expect((await readFile((result.value as { path: string }).path)).byteLength).toBeGreaterThan(0)
     expect(polls).toBeGreaterThanOrEqual(2)
+    const post = server.requests.find(entry => entry.method === 'POST')
+    expect(post?.url).toBe('/videos/generations')
+    expect(JSON.parse(post?.body ?? '{}') as { reference_audios?: unknown; voices?: unknown }).toMatchObject({
+      reference_audios: [{ voice_id: 'eve' }],
+    })
+    expect(post?.body).not.toContain('"voices"')
   })
 
   it('fails loud when credentials are missing', async () => {
