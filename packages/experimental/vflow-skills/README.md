@@ -35,6 +35,15 @@ Turn on **Japanese-style development workflow** in the GUI plugin manager, or mo
 | Field | Default | Meaning |
 |---|---|---|
 | `providerName` | `vflow` | Unique provider name registered on `ctx.skills` |
+| `teamSettings.source` | empty | `http(s)://` address or absolute path of the published team settings file |
+| `teamSettings.stateFile` | `~/.dsh/vflow/team-settings.json` in the bundle | Absolute path of the adopted copy |
+| `teamSettings.fetchTimeoutMs` | `10000` | Time limit for one fetch of the source |
+
+### Team settings
+
+Company values such as project names, ticket prefixes, document rules, bench resources, and executors live in one JSON team settings file, not in this package. Publish the file on a LAN host, such as the team's bastion host, and point `teamSettings.source` at it. `ctx.vflowTeamSettings` reads the adopted copy at startup and fetches the source: the first valid version is adopted directly, and a later version with different bytes stays `pending` until `accept(sha256)` names the version the user reviewed. While the source is unreachable, the adopted copy stays in use and the state carries `sourceError`.
+
+The file never holds secrets. Each connector names a credential key, and a document with a password-, token-, or secret-like key anywhere is refused with that key's JSON path. Each user's account values stay in the local credential store.
 
 The pack currently ships `vflow-first-mate`: the first agent only splits work, delegates changes to workers, verifies evidence, and asks the user before merges, pushes, and ticket or repository writes.
 
@@ -47,6 +56,8 @@ The pack currently ships `vflow-first-mate`: the first agent only splits work, d
 <summary>Implementation internals — click to expand</summary>
 
 [`src/index.ts`](src/index.ts) resolves `VFLOW_SKILL_DIR` from the module location and mounts [`dsh-skill-filesystem`](../../skill/skill-filesystem/README.md) as a child plugin with `includeDefaultRoots: false`, that directory as `bundledSkillDir`, and watching disabled because shipped files change only with the package. Disposal of this plugin disposes the child provider and removes its catalog. The skill file format and frontmatter rules are those of the filesystem provider.
+
+[`src/team-settings.ts`](src/team-settings.ts) parses a document, refuses secret-like keys, validates the schema and the `defaultReviewer` executor reference, and hashes the exact text. [`src/team-settings-service.ts`](src/team-settings-service.ts) writes the adopted text byte for byte with `writeFileAtomic` (mode `0600`), so the adopted copy and the published file share one SHA-256. An unreadable or invalid adopted copy, or a failed first fetch, leaves the service `failed` instead of falling back to defaults.
 
 </details>
 
@@ -82,6 +93,7 @@ The catalog changes only when the package changes, so it keeps an existing cache
 <a id="known-limitations-and-deferred-work"></a>
 
 - **Workflow skills pending** — the V-model workflow skills are added after a redaction review of their customer and company references.
+- **No periodic update check** — the source is checked at startup and on `refresh()`; the settings page that calls it arrives with the install wizard.
 - **Rules are guidance** — the first-mate rules are model instructions; gate enforcement for repository and ticket writes arrives with the vflow workflow engine.
 
 <a id="dev-note"></a>

@@ -35,6 +35,15 @@ kind: "package-bundle"
 | 字段 | 默认值 | 含义 |
 |---|---|---|
 | `providerName` | `vflow` | 注册到 `ctx.skills` 的唯一提供方名称 |
+| `teamSettings.source` | 空 | 已发布团队设置文件的 `http(s)://` 地址或绝对路径 |
+| `teamSettings.stateFile` | 组合包中为 `~/.dsh/vflow/team-settings.json` | 已采用副本的绝对路径 |
+| `teamSettings.fetchTimeoutMs` | `10000` | 单次获取来源的时间上限 |
+
+### 团队设置
+
+项目名、票号前缀、文档规范、台架资源和执行者等公司取值放在一个 JSON 团队设置文件里，不放进本包。把文件发布在局域网主机上（例如团队的堡垒机），再把 `teamSettings.source` 指向它。`ctx.vflowTeamSettings` 启动时读取已采用副本并获取来源：第一个有效版本直接采用；之后字节不同的版本保持 `pending`，直到 `accept(sha256)` 指明用户审阅过的版本。来源不可达时继续使用已采用副本，状态中带 `sourceError`。
+
+该文件从不保存机密。每个连接器只写凭据键名；文档中任何位置出现类似密码、token 或 secret 的键都会被拒绝，并给出该键的 JSON 路径。每位用户的账号值保存在本机凭据库中。
 
 当前随附 `vflow-first-mate`：第一个 agent 只拆分工作、把改动委派给工人、核对证据，并在合并、推送以及写入工单或仓库前询问用户。
 
@@ -47,6 +56,8 @@ kind: "package-bundle"
 <summary>实现细节——点击展开</summary>
 
 [`src/index.ts`](src/index.ts) 根据模块位置解析 `VFLOW_SKILL_DIR`，并以子插件方式挂载 [`dsh-skill-filesystem`](../../skill/skill-filesystem/README.zh.md)：`includeDefaultRoots: false`，`bundledSkillDir` 为该目录，并关闭监视，因为随附文件只随包版本变化。释放本插件会释放子提供方并移除其目录。skill 文件格式和 frontmatter 规则沿用文件系统提供方。
+
+[`src/team-settings.ts`](src/team-settings.ts) 解析文档、拒绝类似机密的键、校验 schema 和 `defaultReviewer` 执行者引用，并对原文计算哈希。[`src/team-settings-service.ts`](src/team-settings-service.ts) 用 `writeFileAtomic`（权限 `0600`）逐字节写入采用的原文，因此已采用副本与已发布文件的 SHA-256 相同。已采用副本不可读或无效、或首次获取失败时，服务进入 `failed`，不会退回默认值。
 
 </details>
 
@@ -82,6 +93,7 @@ kind: "package-bundle"
 <a id="known-limitations-and-deferred-work"></a>
 
 - **工作流 skill 待加入**——V 字工作流 skill 需先完成客户与公司信息的脱敏审查再加入。
+- **没有定时检查更新**——只在启动时和调用 `refresh()` 时检查来源；调用它的设置页随安装向导一起提供。
 - **守则只是指引**——副手守则是模型指令；仓库与工单写入的闸门强制由 vflow 工作流引擎提供。
 
 <a id="dev-note"></a>

@@ -13,6 +13,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type Schema from '@deepseek-ai/schemastery'
 import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
+import { TeamSettingsConfig, TeamSettingsService } from './team-settings-service.ts'
+
+export * from './team-settings.ts'
+export * from './team-settings-service.ts'
 
 /** Cordis plugin name. */
 export const name = 'vflow-skills'
@@ -26,16 +30,20 @@ export const VFLOW_SKILL_DIR: string = fileURLToPath(new URL('../skills', import
 export interface Config {
   /** Unique provider name registered on `ctx.skills`. */
   providerName: string
+  /** Where the team settings document is published and adopted. */
+  teamSettings: TeamSettingsConfig
 }
 
 export const Config: Schema<Config> = z.object({
   providerName: z.string().min(1).default('vflow').description('Unique provider name registered on `ctx.skills`.'),
+  teamSettings: TeamSettingsConfig,
 })
 
 /**
- * Mount a filesystem skill provider that scans only {@link VFLOW_SKILL_DIR}.
+ * Mount a filesystem skill provider that scans only {@link VFLOW_SKILL_DIR},
+ * and the team settings loader.
  * @param ctx - context carrying the skill registry.
- * @param config - validated provider name.
+ * @param config - validated provider name and team settings location.
  */
 export function apply(ctx: Context, config: Config): void {
   ctx.plugin(SkillFileSystem, {
@@ -44,4 +52,5 @@ export function apply(ctx: Context, config: Config): void {
     bundledSkillDir: VFLOW_SKILL_DIR,
     watch: false,
   })
+  ctx.plugin(TeamSettingsService, config.teamSettings)
 }

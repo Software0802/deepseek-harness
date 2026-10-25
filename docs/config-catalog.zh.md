@@ -1400,13 +1400,25 @@ export type PaidTranslationProvider = 'deepseek-account' | 'deepseek-official'
 ## `@deepseek-ai/dsh-experimental-vflow-skills`
 
 - `inject`: `skills`
-- `source`: [`packages/experimental/vflow-skills/src/index.ts:26`](../packages/experimental/vflow-skills/src/index.ts)
+- `source`: [`packages/experimental/vflow-skills/src/index.ts:30`](../packages/experimental/vflow-skills/src/index.ts)
 
 ```ts config-catalog
 /** vflow skill pack configuration. */
 export interface Config {
   /** Unique provider name registered on `ctx.skills`. */
   providerName: string
+  /** Where the team settings document is published and adopted. */
+  teamSettings: TeamSettingsConfig
+}
+
+/** Team settings loader configuration. */
+export interface TeamSettingsConfig {
+  /** `http(s)://` address or absolute file path of the published document; empty when not configured yet. */
+  source: string
+  /** Absolute path of the adopted copy. */
+  stateFile: string
+  /** Time limit for one fetch of `source`. */
+  fetchTimeoutMs: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-vflow-skills -->
