@@ -1,0 +1,144 @@
+/* Sakura decoration layer. Colors and images come from the `--sakura-*`
+ * variables the active preset sets on `body`; `body[data-sakura]` marks the
+ * plugin as active and the `data-sakura-art` / `data-sakura-sticker`
+ * attributes follow the viewer's toggles. Host elements are matched by data
+ * attributes and by the readable suffix of their hashed CSS-module classes. */
+
+/* Conversation backdrop: two soft glows plus the character art, painted
+ * under the transcript and composer inside the region's own stacking context. */
+body[data-sakura] [data-conversation-region='chat'] {
+  isolation: isolate;
+}
+
+body[data-sakura] [data-conversation-region='chat']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(48% 42% at 88% 8%, var(--sakura-glow-a), transparent 72%),
+    radial-gradient(42% 38% at 6% 96%, var(--sakura-glow-b), transparent 70%);
+}
+
+body[data-sakura][data-sakura-art] [data-conversation-region='chat']::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  width: min(44%, 580px);
+  height: min(94%, 860px);
+  pointer-events: none;
+  background: var(--sakura-art) no-repeat right bottom / contain;
+  opacity: 0.16;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 42%), linear-gradient(to bottom, transparent 0, #000 22%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent 0, #000 42%), linear-gradient(to bottom, transparent 0, #000 22%);
+  mask-composite: intersect;
+  animation: sakura-fade-in 900ms ease-out both;
+}
+
+body[data-sakura][data-ds-dark-theme][data-sakura-art] [data-conversation-region='chat']::after {
+  opacity: 0.2;
+}
+
+/* Sidebar: a tinted wash at the top, a blossom branch in the corner, and the
+ * sticker resting above the footer. */
+body[data-sakura] [class*='_sidebarCol'] {
+  position: relative;
+  isolation: isolate;
+  background-image: linear-gradient(180deg, var(--sakura-sidebar-top) 0, transparent 340px);
+}
+
+/* The sidebar panel paints its own fill; let the column's wash show through. */
+body[data-sakura] [class*='_sidebarCol'] > * > [class*='_root'] {
+  background-color: transparent;
+}
+
+body[data-sakura] [class*='_sidebarCol']::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  z-index: -1;
+  width: 190px;
+  height: 130px;
+  pointer-events: none;
+  background: var(--sakura-petal-edge);
+  opacity: 0.32;
+  -webkit-mask: url('./assets/sakura-branch.svg') no-repeat right top / contain;
+  mask: url('./assets/sakura-branch.svg') no-repeat right top / contain;
+}
+
+body[data-sakura][data-sakura-sticker] [class*='_sidebarCol']::after {
+  content: '';
+  position: absolute;
+  right: 14px;
+  bottom: 58px;
+  z-index: -1;
+  width: 128px;
+  height: 148px;
+  pointer-events: none;
+  background: var(--sakura-sticker) no-repeat center bottom / contain;
+  -webkit-mask-image: var(--sakura-sticker-mask);
+  mask-image: var(--sakura-sticker-mask);
+  filter: drop-shadow(0 8px 14px var(--sakura-glow-ring));
+  animation: sakura-fade-in 700ms ease-out both, sakura-float 6s ease-in-out 700ms infinite;
+}
+
+@media (max-height: 620px) {
+  body[data-sakura][data-sakura-sticker] [class*='_sidebarCol']::after {
+    display: none;
+  }
+}
+
+/* Hero headline in an accent gradient. */
+body[data-sakura] [class*='_titleGroup'] > span:first-child {
+  background: linear-gradient(100deg, var(--sakura-title-from) 10%, var(--sakura-title-to) 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Composer: frosted glass over the backdrop with an accent halo on focus. */
+body[data-sakura] [data-composer-card='true'] {
+  background: var(--sakura-glass);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  backdrop-filter: blur(18px) saturate(1.3);
+  box-shadow: 0 14px 40px -18px var(--sakura-glow-ring), 0 2px 8px -4px var(--sakura-glow-ring);
+  transition: box-shadow 220ms ease;
+}
+
+body[data-sakura] [data-composer-card='true']:focus-within {
+  box-shadow: 0 0 0 3px var(--sakura-glow-ring), 0 16px 44px -16px var(--sakura-glow-ring);
+}
+
+body[data-sakura] [data-composer-card='true'] button[class*='_primary']:not(:disabled) {
+  background: linear-gradient(140deg, var(--dsw-static-deepseek-400), var(--dsw-static-deepseek-600));
+  box-shadow: 0 6px 16px -6px var(--dsw-static-deepseek-500);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+@media (hover: hover) {
+  body[data-sakura] [data-composer-card='true'] button[class*='_primary']:not(:disabled):hover {
+    transform: translateY(-1px) scale(1.04);
+    box-shadow: 0 10px 20px -8px var(--dsw-static-deepseek-500);
+  }
+}
+
+@keyframes sakura-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-6px) rotate(-1.2deg); }
+}
+
+@keyframes sakura-fade-in {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-sakura] [data-conversation-region='chat']::after,
+  body[data-sakura] [class*='_sidebarCol']::after {
+    animation: none;
+  }
+}

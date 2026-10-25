@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 150">
+  <defs>
+    <g id="f">
+      <g fill-opacity="0.82">
+        <path d="M0 0C-6-4-7-12-3-16C-1-18 0-17 0-15C0-17 1-18 3-16C7-12 6-4 0 0Z"/>
+        <path d="M0 0C-6-4-7-12-3-16C-1-18 0-17 0-15C0-17 1-18 3-16C7-12 6-4 0 0Z" transform="rotate(72)"/>
+        <path d="M0 0C-6-4-7-12-3-16C-1-18 0-17 0-15C0-17 1-18 3-16C7-12 6-4 0 0Z" transform="rotate(144)"/>
+        <path d="M0 0C-6-4-7-12-3-16C-1-18 0-17 0-15C0-17 1-18 3-16C7-12 6-4 0 0Z" transform="rotate(216)"/>
+        <path d="M0 0C-6-4-7-12-3-16C-1-18 0-17 0-15C0-17 1-18 3-16C7-12 6-4 0 0Z" transform="rotate(288)"/>
+      </g>
+      <circle r="2.6"/>
+    </g>
+  </defs>
+  <g fill="none" stroke="#000" stroke-linecap="round">
+    <path d="M222 4C182 12 150 30 124 54C104 72 86 80 62 84" stroke-width="3.4"/>
+    <path d="M168 20C162 40 166 58 178 72" stroke-width="2.2"/>
+    <path d="M132 46C124 32 110 24 92 22" stroke-width="2"/>
+    <path d="M96 74C92 88 94 100 102 110" stroke-width="1.6"/>
+  </g>
+  <use href="#f" transform="translate(178 74) rotate(12)"/>
+  <use href="#f" transform="translate(92 22) rotate(-20) scale(0.85)"/>
+  <use href="#f" transform="translate(60 84) rotate(30) scale(1.1)"/>
+  <use href="#f" transform="translate(102 112) rotate(-8) scale(0.75)"/>
+  <use href="#f" transform="translate(140 40) rotate(40) scale(0.6)"/>
+  <ellipse cx="34" cy="112" rx="4" ry="6.5" transform="rotate(-38 34 112)" fill-opacity="0.6"/>
+  <ellipse cx="150" cy="122" rx="3.2" ry="5.2" transform="rotate(26 150 122)" fill-opacity="0.45"/>
+</svg>

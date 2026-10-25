@@ -3,35 +3,35 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/experimental/theme-sakura/README.md
 /:
-  en: 504f25947ac6a91a
-  zh: b9bd928788841bb6
+  en: 9882b7ca6fff3dce
+  zh: 03886249aa8bff16
 /deepseek-ai-dsh-experimental-theme-sakura:
   en: 362b670dc198961c
   zh: 57f9bb63fdbd892e
 /deepseek-ai-dsh-experimental-theme-sakura/summary:
-  en: 01437a6eeea1e31e
-  zh: 0eb173786894a41b
+  en: ba2e64d92385dd8d
+  zh: 52b4894374d3780c
 /deepseek-ai-dsh-experimental-theme-sakura/table-of-contents:
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
 /deepseek-ai-dsh-experimental-theme-sakura/use-this-package:
-  en: 85ad28280f730581
-  zh: 2573321b989cf7b2
+  en: 44bd70908a08c4f9
+  zh: 7b4b93af823df193
 /deepseek-ai-dsh-experimental-theme-sakura/understand-the-implementation:
-  en: cbdd210a18d81f86
-  zh: 81afa933b9c201b1
+  en: d00a898bb9b2bc31
+  zh: 8d9bd025e20f3ac5
 /deepseek-ai-dsh-experimental-theme-sakura/further-exploration:
   en: fa11a2890641bd86
   zh: f16feba2f0dd2388
 /deepseek-ai-dsh-experimental-theme-sakura/model-experience:
-  en: a4af2632d16f3bec
-  zh: 1c0503a97ec96203
+  en: 0e8b0b4386e8c193
+  zh: b56f3fb4eed45b03
 /deepseek-ai-dsh-experimental-theme-sakura/model-experience/kv-cache-effect:
   en: 4f0eadf94828e66e
   zh: 173d6d7020e6aae1
 /deepseek-ai-dsh-experimental-theme-sakura/known-limitations-and-deferred-work:
-  en: 5f055211419b675b
-  zh: fe30cd1ce363bbc5
+  en: cad201a42d340ff5
+  zh: 1e7651262528af01
 /deepseek-ai-dsh-experimental-theme-sakura/known-limitations-and-deferred-work/dev-note:
   en: 0225ba087c5266f3
   zh: 0400e21a2683a23c
