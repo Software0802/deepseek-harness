@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "vflow スキル",
+    "title": "日系開発ワークフロー",
     "description": "vflow の副官作業ルールをスキルとしてエージェントに提供します。",
     "detail": "docs/DETAIL.md"
   }

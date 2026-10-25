@@ -25,7 +25,7 @@ kind: "package-bundle"
 <a id="use-this-package"></a>
 ## 使用本包
 
-在 GUI 插件管理器中开启 **vflow 技能包**，或在显式组合中把插件挂载到 skill 注册表之后。agent 要加载 skill，还需要挂载 `dsh-tool-skill` 这类面向模型的 skill 工具。
+在 GUI 插件管理器中开启 **日系开发工作流**，或在显式组合中把插件挂载到 skill 注册表之后。agent 要加载 skill，还需要挂载 `dsh-tool-skill` 这类面向模型的 skill 工具。
 
 ```yaml
 - name: '@deepseek-ai/dsh-skill'

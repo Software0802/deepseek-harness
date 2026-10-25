@@ -25,7 +25,7 @@ Add the vflow skill pack to give every agent the first-mate working rules and th
 <a id="use-this-package"></a>
 ## Use this package
 
-Turn on **vflow skills** in the GUI plugin manager, or mount the plugin after the skill registry in an explicit composition. A model-facing skill tool such as `dsh-tool-skill` must also be mounted for agents to load the skills.
+Turn on **Japanese-style development workflow** in the GUI plugin manager, or mount the plugin after the skill registry in an explicit composition. A model-facing skill tool such as `dsh-tool-skill` must also be mounted for agents to load the skills.
 
 ```yaml
 - name: '@deepseek-ai/dsh-skill'
