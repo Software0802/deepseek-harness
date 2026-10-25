@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "vflow スキル",
+    "description": "vflow の副官作業ルールをスキルとしてエージェントに提供します。",
+    "detail": "docs/DETAIL.md"
+  }
+}

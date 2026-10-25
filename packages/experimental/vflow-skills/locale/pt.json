@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Habilidades do vflow",
+    "description": "Disponibiliza aos agentes as regras de trabalho do imediato do vflow como habilidade.",
+    "detail": "docs/DETAIL.md"
+  }
+}

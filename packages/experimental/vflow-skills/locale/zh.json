@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "vflow 技能包",
+    "description": "让智能体以 skill 的形式使用 vflow 副手工作守则。",
+    "detail": "docs/DETAIL.zh.md"
+  }
+}

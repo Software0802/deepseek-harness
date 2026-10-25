@@ -1392,6 +1392,23 @@ export type PaidTranslationProvider = 'deepseek-account' | 'deepseek-official'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-translator -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-vflow-skills -->
+<a id="deepseek-aidsh-experimental-vflow-skills"></a>
+
+## `@deepseek-ai/dsh-experimental-vflow-skills`
+
+- `inject`: `skills`
+- `source`: [`packages/experimental/vflow-skills/src/index.ts:26`](../packages/experimental/vflow-skills/src/index.ts)
+
+```ts config-catalog
+/** vflow skill pack configuration. */
+export interface Config {
+  /** Unique provider name registered on `ctx.skills`. */
+  providerName: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-vflow-skills -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-worktree -->
 <a id="deepseek-aidsh-experimental-worktree"></a>
 

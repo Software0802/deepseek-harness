@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Навыки vflow",
+    "description": "Даёт агентам правила работы старшего помощника vflow в виде навыка.",
+    "detail": "docs/DETAIL.md"
+  }
+}

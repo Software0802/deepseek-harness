@@ -1,0 +1,3 @@
+- insert:
+    - id: vflow-skills
+      name: '@deepseek-ai/dsh-experimental-vflow-skills'

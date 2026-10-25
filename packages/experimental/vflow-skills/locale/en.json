@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "vflow skills",
+    "description": "Give agents the vflow first-mate working rules as a skill.",
+    "detail": "docs/DETAIL.md"
+  }
+}
