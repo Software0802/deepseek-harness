@@ -76,6 +76,7 @@ Promotion requires a named product role, documented public behavior and limitati
 | [`tool-subagent-oar`](tool-subagent-oar/README.md) | Select a configured external agent for each delegated task | `ctx.tools` |
 | [`claude-code-mods`](claude-code-mods/README.md) | Run Claude Code mods as plugins: their hook chains on harness extension points and a band above the prompt | `ctx.claudeCodeMods` |
 | [`client-ui-claude-code-mods`](client-ui-claude-code-mods/README.md) | The Web band that draws a mod's tree above the prompt and sends button clicks back | — |
+| [`theme-sakura`](theme-sakura/README.md) | Default-disabled cherry-blossom palette with rounder corners for the light and dark GUI schemes | — |
 | [`ptc-runtime-python`](ptc-runtime-python/README.md) | CPython subprocess backend for the PTC execution seam | `ctx.ptcRuntime` |
 | [CUA](cua/README.md) | Application/window objects, authorized execution, and permission controls. | `ctx.cuaAccess` |
 | [macOS CUA](cua-macos/README.md) | Swift native execution and platform preparation. | `ctx.computerUse` |

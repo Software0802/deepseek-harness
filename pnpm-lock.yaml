@@ -10263,6 +10263,15 @@ importers:
         specifier: workspace:~
         version: link:../../../vendor/cordis
 
+  packages/experimental/theme-sakura:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-ui-theme':
+        specifier: workspace:*
+        version: link:../../client/ui-theme
+
   packages/experimental/tool-agent-team:
     dependencies:
       '@deepseek-ai/schemastery':
