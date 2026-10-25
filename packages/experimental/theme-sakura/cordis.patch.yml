@@ -1,0 +1,3 @@
+- insert:
+    - id: theme-sakura
+      name: '@deepseek-ai/dsh-experimental-theme-sakura'
