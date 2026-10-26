@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { parseTeamSettings, TeamSettingsError, TeamSettingsService } from '../src/index.ts'
-import type { TeamSettingsConfig } from '../src/index.ts'
+import { createVolatile } from '../../../../vendor/cosmokit/src/volatile.ts'
 
 function document(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
@@ -92,9 +92,13 @@ describe('TeamSettingsService', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  async function start(config: Partial<TeamSettingsConfig>): Promise<TeamSettingsService> {
+  async function start(config: { source?: string; stateFile?: string }): Promise<TeamSettingsService> {
     context = new Context()
-    await context.plugin(TeamSettingsService, { source: '', fetchTimeoutMs: 10_000, stateFile: join(dir, 'state', 'team-settings.json'), ...config })
+    await context.plugin(TeamSettingsService, {
+      source: createVolatile(config.source ?? ''),
+      fetchTimeoutMs: 10_000,
+      stateFile: config.stateFile ?? join(dir, 'state', 'team-settings.json'),
+    })
     return context.vflowTeamSettings
   }
 
@@ -175,9 +179,14 @@ describe('TeamSettingsService', () => {
     expect(unreadable.snapshot().status).toBe('failed')
   })
 
-  it('refuses relative paths at load', async () => {
+  it('refuses a relative state file at load and a relative source at each check', async () => {
     context = new Context()
-    await expect(context.plugin(TeamSettingsService, { source: '', fetchTimeoutMs: 1, stateFile: 'relative.json' })).rejects.toThrow(/stateFile must be an absolute path/)
-    await expect(context.plugin(TeamSettingsService, { fetchTimeoutMs: 1, stateFile: join(dir, 's.json'), source: 'relative.json' })).rejects.toThrow(/source must be/)
+    await expect(context.plugin(TeamSettingsService, { source: createVolatile(''), fetchTimeoutMs: 1, stateFile: 'relative.json' }))
+      .rejects.toThrow(/stateFile must be an absolute path/)
+    await context.fiber.dispose()
+    const service = await start({ source: 'relative.json' })
+    const state = service.snapshot()
+    expect(state.status === 'failed' && state.error.message).toMatch(/source must be/)
+    expect(service.source()).toBe('relative.json')
   })
 })

@@ -12,6 +12,7 @@
 import { createHash } from 'node:crypto'
 import z from '@deepseek-ai/schemastery'
 import type Schema from '@deepseek-ai/schemastery'
+import type { ConnectorKind } from './types.ts'
 
 /** `format` value that identifies a team settings document. */
 export const TEAM_SETTINGS_FORMAT = 'vflow-team-settings'
@@ -21,8 +22,7 @@ export const TEAM_SETTINGS_VERSION = 1
 /** Object keys refused anywhere in a team settings document. */
 const SECRET_KEY = /pass(word|wd)?|secret|token|api[-_]?key|private[-_]?key/i
 
-/** External system kinds a connector can address. */
-export type ConnectorKind = 'redmine' | 'jira' | 'gerrit' | 'svn' | 'jenkins' | 'feishu' | 'wiki'
+export type { ConnectorKind }
 
 /**
  * How the workflow may write to a connector: `paste-only` produces text for a

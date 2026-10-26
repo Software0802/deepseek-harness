@@ -11,14 +11,18 @@
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type Schema from '@deepseek-ai/schemastery'
 import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
 import { TeamSettingsConfig, TeamSettingsService } from './team-settings-service.ts'
 import { AccountsConfig, AccountsService } from './accounts.ts'
+import { VflowController } from './controller.ts'
+import type {} from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 
 export * from './team-settings.ts'
 export * from './team-settings-service.ts'
 export * from './accounts.ts'
+export * from './controller.ts'
+export type * from './types.ts'
 
 /** Cordis plugin name. */
 export const name = 'vflow-skills'
@@ -38,7 +42,7 @@ export interface Config {
   accounts: AccountsConfig
 }
 
-export const Config: Schema<Config> = z.object({
+export const Config = z.object({
   providerName: z.string().min(1).default('vflow').description('Unique provider name registered on `ctx.skills`.'),
   teamSettings: TeamSettingsConfig,
   accounts: AccountsConfig,
@@ -46,7 +50,9 @@ export const Config: Schema<Config> = z.object({
 
 /**
  * Mount a filesystem skill provider that scans only {@link VFLOW_SKILL_DIR},
- * the team settings loader, and the connector account store.
+ * the team settings loader, the connector account store, and the settings
+ * page controller. Saving a new team settings source on the settings page
+ * checks it at once.
  * @param ctx - context carrying the skill registry.
  * @param config - validated provider name, team settings location, and account test limits.
  */
@@ -59,4 +65,17 @@ export function apply(ctx: Context, config: Config): void {
   })
   ctx.plugin(TeamSettingsService, config.teamSettings)
   ctx.plugin(AccountsService, config.accounts)
+  ctx.plugin(VflowController)
+  // The Loader notifies only this plugin's own Context, so the listener lives here and reaches the service through `active`.
+  let active: TeamSettingsService | undefined
+  ctx.inject(['vflowTeamSettings'], (child) => {
+    active = child.vflowTeamSettings
+    child.effect(() => () => { active = undefined })
+  })
+  ctx.on('loader/volatile-update', (paths) => {
+    if (!paths.some(path => path[0] === 'teamSettings' && path[1] === 'source')) return
+    active?.refresh().catch((error: unknown) => { ctx.logger.warn(error) })
+  })
+  // The plugin page ships its own settings page instead of a generated form.
+  ctx.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
 }

@@ -12,7 +12,8 @@ import z from '@deepseek-ai/schemastery'
 import type Schema from '@deepseek-ai/schemastery'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { CredentialKey } from '@deepseek-ai/dsh-credentials'
-import type { ConnectorKind, ConnectorSettings } from './team-settings.ts'
+import type { ConnectorSettings } from './team-settings.ts'
+import type { AccountInput, AccountTestResult, AccountView, ConnectorKind } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -34,36 +35,22 @@ export const AccountsConfig: Schema<AccountsConfig> = z.object({
   probeTimeoutMs: z.natural().min(1).default(10_000).description('Time limit for one connection test, in milliseconds.'),
 })
 
-/** Account values a user enters for one connector. */
-export interface AccountInput {
-  /** Login name on the connector. */
-  username: string
-  /** Password, API key, or HTTP access token for that login. */
-  secret: string
-}
+/** Why an account operation was refused. */
+export type AccountErrorCode = 'unknown-connector' | 'invalid-account'
 
-/** Account facts safe for a settings page: never the secret. */
-export interface AccountView {
-  connectorId: string
-  kind: ConnectorKind
-  url: string
-  configured: boolean
-  /** Saved login name; absent while unconfigured. */
-  username?: string
-  /** Whether {@link AccountsService.test} can probe this connector. */
-  testable: boolean
-}
+/** A refused account operation; `connectorId` names the connector it addressed. */
+export class AccountError extends Error {
+  override name = 'AccountError'
 
-/**
- * Connection test result. `unsupported`: no read-only probe exists for this
- * connector kind or address scheme. `not-configured`: no account is saved.
- * `unauthorized`: the connector refused the account. `unreachable`: the request
- * failed or timed out. `unexpected-status`: any other HTTP status.
- */
-export type AccountTestResult =
-  | { readonly ok: true; readonly status: number }
-  | { readonly ok: false; readonly reason: 'unsupported' | 'not-configured' | 'unreachable' }
-  | { readonly ok: false; readonly reason: 'unauthorized' | 'unexpected-status'; readonly status: number }
+  /**
+   * @param code - refusal reason.
+   * @param connectorId - connector the operation addressed.
+   * @param message - human-readable explanation.
+   */
+  constructor(readonly code: AccountErrorCode, readonly connectorId: string, message: string) {
+    super(message)
+  }
+}
 
 /** Read-only path, relative to the connector URL, that answers 2xx only for a valid login. */
 const PROBE_PATH: Readonly<Partial<Record<ConnectorKind, string>>> = {
@@ -126,12 +113,12 @@ export class AccountsService extends Service {
    * Save or replace the user's account for one connector.
    * @param connectorId - connector id from the adopted team settings.
    * @param input - login name and secret; both must be non-empty.
-   * @throws Error when the connector is unknown or a value is empty.
+   * @throws AccountError when the connector is unknown or a value is empty.
    */
   async save(connectorId: string, input: AccountInput): Promise<void> {
     this.connector(connectorId)
     if (input.username === '' || input.secret === '') {
-      throw new Error('vflow accounts: username and secret must both be non-empty')
+      throw new AccountError('invalid-account', connectorId, 'vflow accounts: username and secret must both be non-empty')
     }
     const payload: AccountPayload = { username: input.username, secret: input.secret }
     await this.ctx.credentials.modifyRecord(this.key(connectorId), () => Promise.resolve({ kind: 'grant', payload }))
@@ -140,7 +127,7 @@ export class AccountsService extends Service {
   /**
    * Remove the user's account for one connector; no-op when none is saved.
    * @param connectorId - connector id from the adopted team settings.
-   * @throws Error when the connector is unknown.
+   * @throws AccountError when the connector is unknown.
    */
   async remove(connectorId: string): Promise<void> {
     this.connector(connectorId)
@@ -152,7 +139,7 @@ export class AccountsService extends Service {
    * @param connectorId - connector id from the adopted team settings.
    * @param signal - optional caller cancellation, combined with the configured time limit.
    * @returns the probe outcome; transport failures are reported as `unreachable`, not thrown.
-   * @throws Error when the connector is unknown.
+   * @throws AccountError when the connector is unknown.
    */
   async test(connectorId: string, signal?: AbortSignal): Promise<AccountTestResult> {
     const url = probeUrl(this.connector(connectorId))
@@ -188,7 +175,7 @@ export class AccountsService extends Service {
   private connector(connectorId: string): ConnectorSettings {
     const connector = new Map(Object.entries(this.connectors())).get(connectorId)
     if (connector === undefined) {
-      throw new Error(`vflow accounts: connector "${connectorId}" is not in the adopted team settings`)
+      throw new AccountError('unknown-connector', connectorId, `vflow accounts: connector "${connectorId}" is not in the adopted team settings`)
     }
     return connector
   }

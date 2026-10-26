@@ -9,9 +9,8 @@
 import { readFile } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import { Service } from '@deepseek-ai/cordis'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type Schema from '@deepseek-ai/schemastery'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { parseTeamSettings } from './team-settings.ts'
 import type { ParsedTeamSettings } from './team-settings.ts'
@@ -24,8 +23,8 @@ declare module '@deepseek-ai/cordis' {
 
 /** Team settings loader configuration. */
 export interface TeamSettingsConfig {
-  /** `http(s)://` address or absolute file path of the published document; empty when not configured yet. */
-  source: string
+  /** `http(s)://` address or absolute file path of the published document; empty when not configured yet. Editable live. */
+  source: Volatile<string>
   /** Absolute path of the adopted copy. */
   stateFile: string
   /** Time limit for one fetch of `source`. */
@@ -33,8 +32,8 @@ export interface TeamSettingsConfig {
 }
 
 /** Schemastery schema for {@link TeamSettingsConfig}. */
-export const TeamSettingsConfig: Schema<TeamSettingsConfig> = z.object({
-  source: z.string().default('').description('`http(s)://` address or absolute path of the published team settings file.'),
+export const TeamSettingsConfig = z.object({
+  source: z.string().default('').description('`http(s)://` address or absolute path of the published team settings file.').volatile(),
   stateFile: z.string().required().description('Absolute path of the adopted team settings copy.'),
   fetchTimeoutMs: z.natural().min(1).default(10_000).description('Time limit for one fetch of the source, in milliseconds.'),
 })
@@ -55,10 +54,11 @@ export type TeamSettingsState =
   }
   | { readonly status: 'failed'; readonly error: Error }
 
-/** Owner of the adopted team settings version. */
+/**
+ * Owner of the adopted team settings version. Its configuration arrives
+ * parsed by the owning plugin's Config, which creates the `source` reference.
+ */
 export class TeamSettingsService extends Service {
-  static Config: Schema<TeamSettingsConfig> = TeamSettingsConfig
-
   private state: TeamSettingsState = { status: 'unconfigured' }
 
   /**
@@ -69,9 +69,6 @@ export class TeamSettingsService extends Service {
     super(ctx, 'vflowTeamSettings')
     if (!isAbsolute(config.stateFile)) {
       throw new Error(`vflow team settings: stateFile must be an absolute path, got "${config.stateFile}"`)
-    }
-    if (config.source !== '' && !isRemote(config.source) && !isAbsolute(config.source)) {
-      throw new Error(`vflow team settings: source must be an http(s) address or an absolute path, got "${config.source}"`)
     }
   }
 
@@ -89,8 +86,17 @@ export class TeamSettingsService extends Service {
   }
 
   /**
+   * Configured source address, read at the time of the call.
+   * @returns the address, empty while unset.
+   */
+  source(): string {
+    return this.config.source.get()
+  }
+
+  /**
    * Re-read the adopted copy and fetch the source. A first published version is
-   * adopted directly; a later different version becomes `pending`.
+   * adopted directly; a later different version becomes `pending`. A source that
+   * is neither an http(s) address nor an absolute path counts as a failed check.
    * @returns the state after the check.
    */
   async refresh(): Promise<TeamSettingsState> {
@@ -101,13 +107,14 @@ export class TeamSettingsService extends Service {
       this.state = { status: 'failed', error: error as Error }
       return this.state
     }
-    if (this.config.source === '') {
+    const source = this.source()
+    if (source === '') {
       this.state = current === undefined ? { status: 'unconfigured' } : { status: 'ready', current }
       return this.state
     }
     let published: ParsedTeamSettings
     try {
-      published = parseTeamSettings(await this.fetchSource())
+      published = parseTeamSettings(await this.fetchSource(source))
     } catch (error) {
       this.state = current === undefined
         ? { status: 'failed', error: error as Error }
@@ -158,11 +165,16 @@ export class TeamSettingsService extends Service {
   }
 
   /** Fetch the published document text. */
-  private async fetchSource(): Promise<string> {
-    if (!isRemote(this.config.source)) return readFile(this.config.source, 'utf8')
-    const response = await fetch(this.config.source, { signal: AbortSignal.timeout(this.config.fetchTimeoutMs) })
+  private async fetchSource(source: string): Promise<string> {
+    if (!isRemote(source)) {
+      if (!isAbsolute(source)) {
+        throw new Error(`vflow team settings: source must be an http(s) address or an absolute path, got "${source}"`)
+      }
+      return readFile(source, 'utf8')
+    }
+    const response = await fetch(source, { signal: AbortSignal.timeout(this.config.fetchTimeoutMs) })
     if (!response.ok) {
-      throw new Error(`vflow team settings: ${this.config.source} answered HTTP ${response.status}`)
+      throw new Error(`vflow team settings: ${source} answered HTTP ${response.status}`)
     }
     return response.text()
   }

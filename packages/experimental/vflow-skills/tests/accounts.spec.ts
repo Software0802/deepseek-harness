@@ -9,6 +9,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import { AccountsService, TeamSettingsService } from '../src/index.ts'
+import { createVolatile } from '../../../../vendor/cosmokit/src/volatile.ts'
 
 interface Seen {
   url: string | undefined
@@ -66,7 +67,7 @@ async function start(connectors?: Record<string, unknown>): Promise<AccountsServ
   }
   context = new Context()
   await context.plugin(LocalCredentials, { path: join(dir, 'credentials.yaml'), dshHome: dir, watch: false, debounceMs: 0 })
-  await context.plugin(TeamSettingsService, { source: '', stateFile, fetchTimeoutMs: 1_000 })
+  await context.plugin(TeamSettingsService, { source: createVolatile(''), stateFile, fetchTimeoutMs: 1_000 })
   await context.plugin(AccountsService, { probeTimeoutMs: 2_000 })
   return context.vflowAccounts
 }

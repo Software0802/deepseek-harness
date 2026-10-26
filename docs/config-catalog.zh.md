@@ -1400,7 +1400,8 @@ export type PaidTranslationProvider = 'deepseek-account' | 'deepseek-official'
 ## `@deepseek-ai/dsh-experimental-vflow-skills`
 
 - `inject`: `skills`
-- `source`: [`packages/experimental/vflow-skills/src/index.ts:32`](../packages/experimental/vflow-skills/src/index.ts)
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/experimental/vflow-skills/src/index.ts:36`](../packages/experimental/vflow-skills/src/index.ts)
 
 ```ts config-catalog
 /** vflow skill pack configuration. */
@@ -1415,8 +1416,8 @@ export interface Config {
 
 /** Team settings loader configuration. */
 export interface TeamSettingsConfig {
-  /** `http(s)://` address or absolute file path of the published document; empty when not configured yet. */
-  source: string
+  /** `http(s)://` address or absolute file path of the published document; empty when not configured yet. Editable live. */
+  source: Volatile<string>
   /** Absolute path of the adopted copy. */
   stateFile: string
   /** Time limit for one fetch of `source`. */

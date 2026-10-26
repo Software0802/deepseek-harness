@@ -35,10 +35,14 @@ Turn on **Japanese-style development workflow** in the GUI plugin manager, or mo
 | Field | Default | Meaning |
 |---|---|---|
 | `providerName` | `vflow` | Unique provider name registered on `ctx.skills` |
-| `teamSettings.source` | empty | `http(s)://` address or absolute path of the published team settings file |
+| `teamSettings.source` | empty | `http(s)://` address or absolute path of the published team settings file; editable live on the settings page |
 | `teamSettings.stateFile` | `~/.dsh/vflow/team-settings.json` in the bundle | Absolute path of the adopted copy |
 | `teamSettings.fetchTimeoutMs` | `10000` | Time limit for one fetch of the source |
 | `accounts.probeTimeoutMs` | `10000` | Time limit for one connection test |
+
+### Settings page and setup guide
+
+The plugin's page under **Plugins** shows the team settings and the connector accounts. Enter the published address and press **Save and check**; the page shows the team name, version, connector and project counts, and the default reviewer. When a newer version is published, a banner names it and **Accept update** adopts it. Each connector row saves a login name and password or API token, runs **Test connection**, and removes the account. **Setup guide** walks through team settings, accounts, and an environment check that requires adopted settings, an account for every connector, and a passing test for every testable connector.
 
 ### Team settings
 
@@ -73,6 +77,8 @@ The pack currently ships `vflow-first-mate`: the first agent only splits work, d
 [`src/index.ts`](src/index.ts) resolves `VFLOW_SKILL_DIR` from the module location and mounts [`dsh-skill-filesystem`](../../skill/skill-filesystem/README.md) as a child plugin with `includeDefaultRoots: false`, that directory as `bundledSkillDir`, and watching disabled because shipped files change only with the package. Disposal of this plugin disposes the child provider and removes its catalog. The skill file format and frontmatter rules are those of the filesystem provider.
 
 [`src/team-settings.ts`](src/team-settings.ts) parses a document, refuses secret-like keys, validates the schema and the `defaultReviewer` executor reference, and hashes the exact text. [`src/team-settings-service.ts`](src/team-settings-service.ts) writes the adopted text byte for byte with `writeFileAtomic` (mode `0600`), so the adopted copy and the published file share one SHA-256. An unreadable or invalid adopted copy, or a failed first fetch, leaves the service `failed` instead of falling back to defaults.
+
+[`src/controller.ts`](src/controller.ts) serves the `vflow` Remote namespace: team settings state with error causes, `refreshTeamSettings`, `acceptTeamSettings`, and the account operations, whose refusals become the Remote failures `vflow/unknown-connector`, `vflow/invalid-account`, and `vflow/no-pending-version`. A saved source address reaches `teamSettings.source` through the Host config form, and the plugin's `loader/volatile-update` listener checks the new source at once. The browser half in [`src/client`](src/client) registers the page in `plugins.bundle.config` for this package and keeps one page store; an operation's failure stays on the page until the next successful operation.
 
 [`src/accounts.ts`](src/accounts.ts) reads the connector list from the adopted team settings on every call, so an accepted settings update takes effect without a restart. Stored records are validated on read; a record of another kind or with an empty field reads as unconfigured. A connection test combines the caller's signal with `probeTimeoutMs`: a caller abort is rethrown, while network errors and the time limit report `unreachable`.
 
@@ -111,7 +117,7 @@ The catalog changes only when the package changes, so it keeps an existing cache
 
 - **Workflow skills pending** — the V-model workflow skills are added after a redaction review of their customer and company references.
 - **Basic authentication only** — Jira Cloud tokens, Gerrit SSH, Feishu, and wiki connectors have no connection test yet.
-- **No periodic update check** — the source is checked at startup and on `refresh()`; the settings page that calls it arrives with the install wizard.
+- **No periodic update check** — the source is checked at startup, when its address changes, and on **Check for updates**.
 - **Rules are guidance** — the first-mate rules are model instructions; gate enforcement for repository and ticket writes arrives with the vflow workflow engine.
 
 <a id="dev-note"></a>
