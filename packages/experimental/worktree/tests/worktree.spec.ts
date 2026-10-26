@@ -49,6 +49,18 @@ describe('creating and entering retained worktrees', () => {
     expect(await contents(join(result.path, 'tracked.txt'))).toBe('initial\n')
   })
 
+  it('prepares a checkout for another Session without changing the caller directory', async () => {
+    const root = await repo()
+    ctx = await harness(root)
+    const agent = testAgent(ctx, root)
+    const baseCommit = await git(root, 'rev-parse', 'HEAD')
+
+    const result = await ctx.worktrees.prepare(agent, { name: 'handoff' })
+    expect(result).toEqual({ path: join(root, '.agents/worktrees/handoff'), branch: 'handoff', baseCommit, repositoryRoot: root })
+    expect(ctx.workingDirectory.get(agent.session)).toBe(root)
+    expect(await git(result.path, 'symbolic-ref', '--short', 'HEAD')).toBe('handoff')
+  })
+
   it('uses current cwd for repository discovery and accepts an annotated local tag', async () => {
     const original = await repo()
     const root = await repo()

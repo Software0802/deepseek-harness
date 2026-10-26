@@ -8,9 +8,9 @@ export interface CreateWorktreeRequest {
   from?: string
 }
 
-/** Committed Git baseline and the calling Session's resulting working directory. */
+/** Committed Git baseline and the new checkout directory. */
 export interface CreatedWorktree {
-  /** Canonical absolute checkout directory in the filesystem provider's execution world. */
+  /** Absolute checkout directory in the filesystem provider's execution world; canonical when the caller entered it. */
   path: string
   /** Newly created branch name. */
   branch: string

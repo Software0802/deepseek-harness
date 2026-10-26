@@ -1394,6 +1394,56 @@ export type PaidTranslationProvider = 'deepseek-account' | 'deepseek-official'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-translator -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-vflow-skills -->
+<a id="deepseek-aidsh-experimental-vflow-skills"></a>
+
+## `@deepseek-ai/dsh-experimental-vflow-skills`
+
+- `inject`: `skills`
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/experimental/vflow-skills/src/index.ts:41`](../packages/experimental/vflow-skills/src/index.ts)
+
+```ts config-catalog
+/** vflow skill pack configuration. */
+export interface Config {
+  /** Unique provider name registered on `ctx.skills`. */
+  providerName: string
+  /** Where the team settings document is published and adopted. */
+  teamSettings: TeamSettingsConfig
+  /** Connection test limits for the user's connector accounts. */
+  accounts: AccountsConfig
+  /** Fleet capacity, child provider, and worktree branch naming. */
+  fleet: FleetConfig
+}
+
+/** Team settings loader configuration. */
+export interface TeamSettingsConfig {
+  /** `http(s)://` address or absolute file path of the published document; empty when not configured yet. Editable live. */
+  source: Volatile<string>
+  /** Absolute path of the adopted copy. */
+  stateFile: string
+  /** Time limit for one fetch of `source`. */
+  fetchTimeoutMs: number
+}
+
+/** Account store configuration. */
+export interface AccountsConfig {
+  /** Time limit for one connection test. */
+  probeTimeoutMs: number
+}
+
+/** Fleet capacity, child provider, and worktree branch naming. */
+export interface FleetConfig {
+  /** Tasks of one lead Session that run at the same time; later tasks queue. */
+  maxParallel: number
+  /** Subagent provider that starts continuable children. */
+  provider: string
+  /** Prefix of ship-task branch names, followed by the ticket and a short task id. */
+  branchPrefix: string
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-vflow-skills -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-experimental-worktree -->
 <a id="deepseek-aidsh-experimental-worktree"></a>
 

@@ -1,4 +1,4 @@
-/** Creates a new Git branch and checkout, then changes the calling Session's working directory. */
+/** Creates a new Git branch and checkout, then changes the calling Session's working directory or hands the checkout to another Session. */
 
 import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -105,9 +105,25 @@ export class WorktreeService extends Service {
    * @returns canonical checkout path, branch name, pinned commit, and source repository root.
    */
   async create(agent: Agent, request: CreateWorktreeRequest = {}, signal?: AbortSignal): Promise<CreatedWorktree> {
+    return this.run(agent, request, true, signal)
+  }
+
+  /**
+   * Create a fresh branch and checkout exactly as {@link create} does, but leave the caller's
+   * working directory unchanged so another Session can start in the returned path.
+   * @param agent - caller whose current directory selects the source repository and file policy.
+   * @param request - optional new name and local revision; defaults are generated name and HEAD.
+   * @param signal - cancellation of lookup and creation.
+   * @returns checkout path in the filesystem provider's execution world, branch name, pinned commit, and source repository root.
+   */
+  async prepare(agent: Agent, request: CreateWorktreeRequest = {}, signal?: AbortSignal): Promise<CreatedWorktree> {
+    return this.run(agent, request, false, signal)
+  }
+
+  private async run(agent: Agent, request: CreateWorktreeRequest, enter: boolean, signal?: AbortSignal): Promise<CreatedWorktree> {
     const operationSignal = signal === undefined ? this.lifetime.signal : AbortSignal.any([this.lifetime.signal, signal])
     operationSignal.throwIfAborted()
-    const operation = this.createCheckout(agent, this.resolve(request), operationSignal)
+    const operation = this.createCheckout(agent, this.resolve(request), enter, operationSignal)
     this.pending.add(operation)
     try {
       return await operation
@@ -124,7 +140,9 @@ export class WorktreeService extends Service {
     return { branch, revision }
   }
 
-  private async createCheckout(agent: Agent, { branch, revision }: WorktreeSpec, signal: AbortSignal): Promise<CreatedWorktree> {
+  private async createCheckout(
+    agent: Agent, { branch, revision }: WorktreeSpec, enter: boolean, signal: AbortSignal,
+  ): Promise<CreatedWorktree> {
     const cwd = await this.ctx.workingDirectory.ensure(agent, signal)
     const policy = this.ctx.sandboxPolicy.resolve({ session: agent.session })
     const run = (directory: string, args: string[], allowedExitCodes?: number[], env?: NodeJS.ProcessEnv) => runCommand(
@@ -167,7 +185,7 @@ export class WorktreeService extends Service {
         }
       }
       await run(path, ['--work-tree', path, 'reset', '--hard', '--no-recurse-submodules', baseCommit], undefined, overrides)
-      const canonicalPath = await this.ctx.workingDirectory.set(agent, path, signal)
+      const canonicalPath = enter ? await this.ctx.workingDirectory.set(agent, path, signal) : path
       return { path: canonicalPath, branch, baseCommit, repositoryRoot }
     } catch (error) {
       throw new Error(`Could not finish worktree ${branch} at ${path}. Any created checkout and branch are retained. ${error instanceof Error ? error.message : String(error)}`, { cause: error })

@@ -327,6 +327,150 @@ async get(name: string, options: SkillViewOptions = {}): Promise<SkillDefinition
 
 Source: [`packages/skill/skill/src/index.ts`](../../packages/skill/skill/src/index.ts)
 
+<a id="ctxvflowaccounts--accountsservice"></a>
+
+### `ctx.vflowAccounts` — `AccountsService`
+
+Owner of the vflow account records.
+
+```ts cordis-catalog
+/**
+ * One entry per connector in the adopted team settings, in document order.
+ * @returns account facts without secrets; empty while no team settings are adopted.
+ */
+async list(): Promise<AccountView[]>
+
+/**
+ * Save or replace the user's account for one connector.
+ * @param connectorId - connector id from the adopted team settings.
+ * @param input - login name and secret; both must be non-empty.
+ * @throws AccountError when the connector is unknown or a value is empty.
+ */
+async save(connectorId: string, input: AccountInput): Promise<void>
+
+/**
+ * Remove the user's account for one connector; no-op when none is saved.
+ * @param connectorId - connector id from the adopted team settings.
+ * @throws AccountError when the connector is unknown.
+ */
+async remove(connectorId: string): Promise<void>
+
+/**
+ * Probe one connector with a read-only request that succeeds only for a valid login.
+ * @param connectorId - connector id from the adopted team settings.
+ * @param signal - optional caller cancellation, combined with the configured time limit.
+ * @returns the probe outcome; transport failures are reported as `unreachable`, not thrown.
+ * @throws AccountError when the connector is unknown.
+ */
+async test(connectorId: string, signal?: AbortSignal): Promise<AccountTestResult>
+```
+
+Types: [AccountView](credentials.zh.md)
+
+Source: [`packages/experimental/vflow-skills/src/accounts.ts`](../../packages/experimental/vflow-skills/src/accounts.ts)
+
+<a id="ctxvflowcontroller--vflowcontroller"></a>
+
+### `ctx.vflowController` — `VflowController`
+
+Host controller behind the plugin's settings page.
+
+```ts cordis-catalog
+/**
+ * Read the team settings state without checking the source.
+ * @returns the current state.
+ */
+@Remote teamSettings(): TeamSettingsView
+
+/**
+ * Re-read the adopted copy and check the source once.
+ * @returns the state after the check.
+ */
+@Remote async refreshTeamSettings(): Promise<TeamSettingsView>
+
+/**
+ * Adopt the pending version the user reviewed.
+ * @param sha256 - hash of the version shown to the user.
+ * @returns the state after adoption.
+ * @throws RemoteError `vflow/no-pending-version` when that version is no longer pending.
+ */
+@Remote async acceptTeamSettings(sha256: string): Promise<TeamSettingsView>
+
+/**
+ * List one account entry per connector of the adopted team settings.
+ * @returns account facts without secrets.
+ */
+@Remote listAccounts(): Promise<AccountView[]>
+
+/**
+ * Save or replace the user's account for one connector in the local credential store.
+ * @param connectorId - connector id from the adopted team settings.
+ * @param input - login name and secret.
+ * @returns after the account is stored.
+ * @throws RemoteError `vflow/unknown-connector` or `vflow/invalid-account`.
+ */
+@Remote async saveAccount(connectorId: string, input: AccountInput): Promise<void>
+
+/**
+ * Remove the user's account for one connector.
+ * @param connectorId - connector id from the adopted team settings.
+ * @returns after the account is removed.
+ * @throws RemoteError `vflow/unknown-connector`.
+ */
+@Remote async removeAccount(connectorId: string): Promise<void>
+
+/**
+ * Probe one connector with the saved account.
+ * @param connectorId - connector id from the adopted team settings.
+ * @param signal - Client cancellation or Remote contribution withdrawal.
+ * @returns the probe outcome.
+ * @throws RemoteError `vflow/unknown-connector`.
+ */
+@Remote testAccount(connectorId: string, signal: AbortSignal): Promise<AccountTestResult>
+```
+
+Types: [AccountView](credentials.zh.md)
+
+Source: [`packages/experimental/vflow-skills/src/controller.ts`](../../packages/experimental/vflow-skills/src/controller.ts)
+
+<a id="ctxvflowteamsettings--teamsettingsservice"></a>
+
+### `ctx.vflowTeamSettings` — `TeamSettingsService`
+
+Owner of the adopted team settings version. Its configuration arrives parsed by the owning plugin's Config, which creates the `source` reference.
+
+```ts cordis-catalog
+/**
+ * Current loader state.
+ * @returns the latest state snapshot.
+ */
+snapshot(): TeamSettingsState
+
+/**
+ * Configured source address, read at the time of the call.
+ * @returns the address, empty while unset.
+ */
+source(): string
+
+/**
+ * Re-read the adopted copy and fetch the source. A first published version is
+ * adopted directly; a later different version becomes `pending`. A source that
+ * is neither an http(s) address nor an absolute path counts as a failed check.
+ * @returns the state after the check.
+ */
+async refresh(): Promise<TeamSettingsState>
+
+/**
+ * Adopt the pending version the user reviewed.
+ * @param sha256 - hash of the version shown to the user; guards against a newer version arriving in between.
+ * @returns the state after adoption.
+ * @throws Error when no pending version has this hash.
+ */
+async accept(sha256: string): Promise<TeamSettingsState>
+```
+
+Source: [`packages/experimental/vflow-skills/src/team-settings-service.ts`](../../packages/experimental/vflow-skills/src/team-settings-service.ts)
+
 <a id="skills-events"></a>
 
 ### `skills/*` events

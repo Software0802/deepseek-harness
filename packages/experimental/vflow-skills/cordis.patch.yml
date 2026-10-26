@@ -1,0 +1,6 @@
+- insert:
+    - id: vflow-skills
+      name: '@deepseek-ai/dsh-experimental-vflow-skills'
+      config:
+        teamSettings:
+          stateFile: !!js dshHomePath('vflow', 'team-settings.json')
