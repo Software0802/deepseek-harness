@@ -12,6 +12,7 @@ import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client
 import type { AccountInput, AccountTestResult, AccountView, TeamSettingsView } from '../types.ts'
 import { VflowSettings, type VflowInjected } from './VflowSettings.tsx'
 import { en, ja, es, fr, de, ru, pt, NS, zh, type VflowKey } from './locales.ts'
+import { fleetInject, registerFleet } from './fleet/index.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -175,7 +176,6 @@ function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record
 }
 
 function registerUi(ctx: Context): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'vflow: dictionaries')
   const page = new VflowPage(ctx)
   void page.load()
   const injected: VflowInjected = {
@@ -194,23 +194,32 @@ function registerUi(ctx: Context): void {
 }
 
 /**
- * Mount the plugin's Remote contribution and register the settings page.
+ * Mount the plugin's Remote contribution, register the settings page, and register the fleet panel
+ * once the right Sidebar is available.
  * @param ctx - browser Context with `remote`, `slots`, `locale`, and `configForms`.
- * @param contribution - the generated `vflow` Remote contribution.
- * @returns the disposer that withdraws the page and the Remote mount.
+ * @param contribution - the generated `vflow` and `vflowFleet` Remote contribution.
+ * @returns the disposer that withdraws the page, the fleet panel, and the Remote mount.
  */
 export async function mountVflow(ctx: Context, contribution: TypertRemoteContribution): Promise<() => Promise<void>> {
   const disposeRemote = await ctx.remote.$mount(contribution)
+  const dictionaries = ctx.inject(['locale'], (scope) => {
+    scope.effect(() => scope.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'vflow: dictionaries')
+  })
   const ui = ctx.inject(['remote.vflow', ...inject.slice(1)], registerUi)
+  // The fleet panel waits for the right Sidebar, which a Client without it never provides.
+  const fleet = ctx.inject(fleetInject, (scope) => { registerFleet(scope, scope.locale.bind(NS)) })
+  const dispose = async (): Promise<void> => {
+    await fleet.dispose()
+    await ui.dispose()
+    await dictionaries.dispose()
+    await disposeRemote()
+  }
   try {
+    await dictionaries
     await ui
   } catch (error) {
-    await ui.dispose()
-    await disposeRemote()
+    await dispose()
     throw error
   }
-  return async () => {
-    await ui.dispose()
-    await disposeRemote()
-  }
+  return dispose
 }

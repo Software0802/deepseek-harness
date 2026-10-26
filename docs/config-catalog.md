@@ -1399,7 +1399,7 @@ export type PaidTranslationProvider = 'deepseek-account' | 'deepseek-official'
 
 - `inject`: `skills`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/experimental/vflow-skills/src/index.ts:36`](../packages/experimental/vflow-skills/src/index.ts)
+- `source`: [`packages/experimental/vflow-skills/src/index.ts:41`](../packages/experimental/vflow-skills/src/index.ts)
 
 ```ts config-catalog
 /** vflow skill pack configuration. */
@@ -1410,6 +1410,8 @@ export interface Config {
   teamSettings: TeamSettingsConfig
   /** Connection test limits for the user's connector accounts. */
   accounts: AccountsConfig
+  /** Fleet capacity, child provider, and worktree branch naming. */
+  fleet: FleetConfig
 }
 
 /** Team settings loader configuration. */
@@ -1426,6 +1428,16 @@ export interface TeamSettingsConfig {
 export interface AccountsConfig {
   /** Time limit for one connection test. */
   probeTimeoutMs: number
+}
+
+/** Fleet capacity, child provider, and worktree branch naming. */
+export interface FleetConfig {
+  /** Tasks of one lead Session that run at the same time; later tasks queue. */
+  maxParallel: number
+  /** Subagent provider that starts continuable children. */
+  provider: string
+  /** Prefix of ship-task branch names, followed by the ticket and a short task id. */
+  branchPrefix: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-vflow-skills -->

@@ -15,8 +15,8 @@
   en: d152484eb41ac6b4
   zh: 2f8a621b991260a1
 /deepseek-ai-dsh-experimental-vflow-skills/use-this-package:
-  en: 686851004dbcf69c
-  zh: 5978d98b32873a30
+  en: 7fcb5b2c0939d9cc
+  zh: 2ebc80c8a196ec28
 /deepseek-ai-dsh-experimental-vflow-skills/use-this-package/settings-page-and-setup-guide:
   en: ea4afbab849f7413
   zh: 5eb81f4722e090dc
@@ -24,8 +24,11 @@
   en: 7d4246f7703d7ef2
   zh: 4ffd5b3f7b8907f3
 /deepseek-ai-dsh-experimental-vflow-skills/use-this-package/connector-accounts:
-  en: 61a789b711ce162c
-  zh: dd6b5207fdfc0fa6
+  en: 963dcfe884d414b6
+  zh: 443884d2dd4fccce
+/deepseek-ai-dsh-experimental-vflow-skills/use-this-package/fleet:
+  en: 3b509a0596fed165
+  zh: bef63a58ca982479
 /deepseek-ai-dsh-experimental-vflow-skills/understand-the-implementation:
   en: fc3df5005e9143d0
   zh: d3ebcc7951be85f1
@@ -48,8 +51,8 @@
   en: a26336dcdcd420d5
   zh: c82473f701bc599b
 /deepseek-ai-dsh-experimental-vflow-skills/known-limitations-and-deferred-work:
-  en: 6fee7da73f5e2b26
-  zh: 4c5dcde993a742f8
+  en: 8184acbbc52c7c17
+  zh: 19beb7e2c6192584
 /deepseek-ai-dsh-experimental-vflow-skills/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: e88aeb617ffb74ea

@@ -37,6 +37,30 @@
     },
     {
       "path": "../../typert/protocol"
+    },
+    {
+      "path": "../../client/ui-sidebar-right"
+    },
+    {
+      "path": "../../client/ui-session"
+    },
+    {
+      "path": "../../api/session-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../session/session-projection"
+    },
+    {
+      "path": "../../core/session"
+    },
+    {
+      "path": "../../util/brand"
+    },
+    {
+      "path": "../../llm/token-meter"
+    },
+    {
+      "path": "../../subagent/subagent"
     }
   ]
 }

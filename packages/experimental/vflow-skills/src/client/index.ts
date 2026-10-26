@@ -8,6 +8,8 @@ export { inject } from './mount.ts'
 export type { TestState, VflowPageState } from './mount.ts'
 export type { VflowInjected, VflowSettingsProps } from './VflowSettings.tsx'
 export type { VflowKey } from './locales.ts'
+export type { FleetHostState, FleetInjected, FleetPanelProps } from './fleet/index.tsx'
+export { FLEET_ID, FLEET_KIND } from './fleet/index.tsx'
 
 /**
  * Register the settings page on the Client Context.

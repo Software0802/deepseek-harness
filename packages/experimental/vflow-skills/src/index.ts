@@ -11,10 +11,11 @@
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
+import { apply as applySkillFileSystem, inject as skillFileSystemInject, name as skillFileSystemName } from '@deepseek-ai/dsh-skill-filesystem'
 import { TeamSettingsConfig, TeamSettingsService } from './team-settings-service.ts'
 import { AccountsConfig, AccountsService } from './accounts.ts'
 import { VflowController } from './controller.ts'
+import { FleetConfig, FleetService } from './fleet.ts'
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 
@@ -22,6 +23,10 @@ export * from './team-settings.ts'
 export * from './team-settings-service.ts'
 export * from './accounts.ts'
 export * from './controller.ts'
+export * from './fleet.ts'
+export { fleetProjectionDefinition, applyFleetEvent, FLEET_TEXT_LIMITS } from './fleet-log.ts'
+export type * from './fleet-log.ts'
+export { V_MODEL_NODES } from './types.ts'
 export type * from './types.ts'
 
 /** Cordis plugin name. */
@@ -40,24 +45,27 @@ export interface Config {
   teamSettings: TeamSettingsConfig
   /** Connection test limits for the user's connector accounts. */
   accounts: AccountsConfig
+  /** Fleet capacity, child provider, and worktree branch naming. */
+  fleet: FleetConfig
 }
 
 export const Config = z.object({
   providerName: z.string().min(1).default('vflow').description('Unique provider name registered on `ctx.skills`.'),
   teamSettings: TeamSettingsConfig,
   accounts: AccountsConfig,
+  fleet: FleetConfig,
 })
 
 /**
  * Mount a filesystem skill provider that scans only {@link VFLOW_SKILL_DIR},
- * the team settings loader, the connector account store, and the settings
- * page controller. Saving a new team settings source on the settings page
+ * the team settings loader, the connector account store, the settings
+ * page controller, and the fleet. Saving a new team settings source on the settings page
  * checks it at once.
  * @param ctx - context carrying the skill registry.
  * @param config - validated provider name, team settings location, and account test limits.
  */
 export function apply(ctx: Context, config: Config): void {
-  ctx.plugin(SkillFileSystem, {
+  ctx.plugin({ name: skillFileSystemName, inject: skillFileSystemInject, apply: applySkillFileSystem }, {
     providerName: config.providerName,
     includeDefaultRoots: false,
     bundledSkillDir: VFLOW_SKILL_DIR,
@@ -66,6 +74,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.plugin(TeamSettingsService, config.teamSettings)
   ctx.plugin(AccountsService, config.accounts)
   ctx.plugin(VflowController)
+  ctx.plugin(FleetService, config.fleet)
   // The Loader notifies only this plugin's own Context, so the listener lives here and reaches the service through `active`.
   let active: TeamSettingsService | undefined
   ctx.inject(['vflowTeamSettings'], (child) => {

@@ -3822,6 +3822,164 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'vflowAccounts',
+    summary: 'Owner of the vflow account records.',
+    description: 'Owner of the vflow account records.',
+    methods: [
+      {
+        signature: 'async list(): Promise<AccountView[]>',
+        description: 'One entry per connector in the adopted team settings, in document order.',
+        parameters: [],
+        returns: 'account facts without secrets; empty while no team settings are adopted.',
+      },
+      {
+        signature: 'async save(connectorId: string, input: AccountInput): Promise<void>',
+        description: 'Save or replace the user\'s account for one connector.',
+        parameters: [{ name: 'connectorId', description: 'connector id from the adopted team settings.' }, { name: 'input', description: 'login name and secret; both must be non-empty.' }],
+        throws: ['AccountError when the connector is unknown or a value is empty.'],
+      },
+      {
+        signature: 'async remove(connectorId: string): Promise<void>',
+        description: 'Remove the user\'s account for one connector; no-op when none is saved.',
+        parameters: [{ name: 'connectorId', description: 'connector id from the adopted team settings.' }],
+        throws: ['AccountError when the connector is unknown.'],
+      },
+      {
+        signature: 'async test(connectorId: string, signal?: AbortSignal): Promise<AccountTestResult>',
+        description: 'Probe one connector with a read-only request that succeeds only for a valid login.',
+        parameters: [{ name: 'connectorId', description: 'connector id from the adopted team settings.' }, { name: 'signal', description: 'optional caller cancellation, combined with the configured time limit.' }],
+        returns: 'the probe outcome; transport failures are reported as `unreachable`, not thrown.',
+        throws: ['AccountError when the connector is unknown.'],
+      },
+    ],
+  },
+  {
+    key: 'vflowController',
+    summary: 'Host controller behind the plugin\'s settings page.',
+    description: 'Host controller behind the plugin\'s settings page.',
+    methods: [
+      {
+        signature: '@Remote teamSettings(): TeamSettingsView',
+        description: 'Read the team settings state without checking the source.',
+        parameters: [],
+        returns: 'the current state.',
+      },
+      {
+        signature: '@Remote async refreshTeamSettings(): Promise<TeamSettingsView>',
+        description: 'Re-read the adopted copy and check the source once.',
+        parameters: [],
+        returns: 'the state after the check.',
+      },
+      {
+        signature: '@Remote async acceptTeamSettings(sha256: string): Promise<TeamSettingsView>',
+        description: 'Adopt the pending version the user reviewed.',
+        parameters: [{ name: 'sha256', description: 'hash of the version shown to the user.' }],
+        returns: 'the state after adoption.',
+        throws: ['RemoteError `vflow/no-pending-version` when that version is no longer pending.'],
+      },
+      {
+        signature: '@Remote listAccounts(): Promise<AccountView[]>',
+        description: 'List one account entry per connector of the adopted team settings.',
+        parameters: [],
+        returns: 'account facts without secrets.',
+      },
+      {
+        signature: '@Remote async saveAccount(connectorId: string, input: AccountInput): Promise<void>',
+        description: 'Save or replace the user\'s account for one connector in the local credential store.',
+        parameters: [{ name: 'connectorId', description: 'connector id from the adopted team settings.' }, { name: 'input', description: 'login name and secret.' }],
+        returns: 'after the account is stored.',
+        throws: ['RemoteError `vflow/unknown-connector` or `vflow/invalid-account`.'],
+      },
+      {
+        signature: '@Remote async removeAccount(connectorId: string): Promise<void>',
+        description: 'Remove the user\'s account for one connector.',
+        parameters: [{ name: 'connectorId', description: 'connector id from the adopted team settings.' }],
+        returns: 'after the account is removed.',
+        throws: ['RemoteError `vflow/unknown-connector`.'],
+      },
+      {
+        signature: '@Remote testAccount(connectorId: string, signal: AbortSignal): Promise<AccountTestResult>',
+        description: 'Probe one connector with the saved account.',
+        parameters: [{ name: 'connectorId', description: 'connector id from the adopted team settings.' }, { name: 'signal', description: 'Client cancellation or Remote contribution withdrawal.' }],
+        returns: 'the probe outcome.',
+        throws: ['RemoteError `vflow/unknown-connector`.'],
+      },
+    ],
+  },
+  {
+    key: 'vflowFleet',
+    summary: 'Dispatches, supervises, and answers fleet tasks recorded in lead Sessions.',
+    description: 'Dispatches, supervises, and answers fleet tasks recorded in lead Sessions.',
+    methods: [
+      {
+        signature: 'tasks(lead: Agent): readonly FleetTaskView[]',
+        description: 'Fleet tasks recorded in a lead Session.',
+        parameters: [{ name: 'lead', description: 'the lead agent.' }],
+        returns: 'tasks in dispatch order.',
+      },
+      {
+        signature: 'async dispatch(lead: Agent, input: DispatchInput): Promise<DispatchResult>',
+        description: 'Record a task and start it when the lead has a free slot.',
+        parameters: [{ name: 'lead', description: 'the dispatching agent; its directory selects the repository for ship worktrees.' }, { name: 'input', description: 'ticket, title, kind, and the child\'s instructions.' }],
+        returns: 'the task id and its status after the start attempt.',
+      },
+      {
+        signature: 'report(child: Agent, node: VModelNode, activity: string): void',
+        description: 'Record a progress report from a fleet child.',
+        parameters: [{ name: 'child', description: 'the reporting child agent.' }, { name: 'node', description: 'its current V-model stage.' }, { name: 'activity', description: 'one line on what it is doing.' }],
+      },
+      {
+        signature: 'requestDecision(child: Agent, question: string, options: readonly string[]): VflowDecisionId',
+        description: 'Put a question from a fleet child in front of the user.',
+        parameters: [{ name: 'child', description: 'the asking child agent.' }, { name: 'question', description: 'what the user must decide.' }, { name: 'options', description: 'two to four answers.' }],
+        returns: 'the decision id.',
+      },
+      {
+        signature: '@Remote capacity(): Promise<number>',
+        description: 'How many tasks of one lead Session run at the same time.',
+        parameters: [],
+        returns: 'the configured parallel limit.',
+      },
+      {
+        signature: '@Remote async answer(agent: Agent, taskId: string, decisionId: string, choice: number): Promise<void>',
+        description: 'Answer a fleet task\'s pending decision and send the answer to its child as the user\'s next message.',
+        parameters: [{ name: 'agent', description: 'the lead Session the panel shows.' }, { name: 'taskId', description: 'the asking task.' }, { name: 'decisionId', description: 'the decision the user saw.' }, { name: 'choice', description: 'index of the chosen option.' }],
+      },
+    ],
+  },
+  {
+    key: 'vflowTeamSettings',
+    summary: 'Owner of the adopted team settings version.',
+    description: 'Owner of the adopted team settings version. Its configuration arrives parsed by the owning plugin\'s Config, which creates the `source` reference.',
+    methods: [
+      {
+        signature: 'snapshot(): TeamSettingsState',
+        description: 'Current loader state.',
+        parameters: [],
+        returns: 'the latest state snapshot.',
+      },
+      {
+        signature: 'source(): string',
+        description: 'Configured source address, read at the time of the call.',
+        parameters: [],
+        returns: 'the address, empty while unset.',
+      },
+      {
+        signature: 'async refresh(): Promise<TeamSettingsState>',
+        description: 'Re-read the adopted copy and fetch the source. A first published version is adopted directly; a later different version becomes `pending`. A source that is neither an http(s) address nor an absolute path counts as a failed check.',
+        parameters: [],
+        returns: 'the state after the check.',
+      },
+      {
+        signature: 'async accept(sha256: string): Promise<TeamSettingsState>',
+        description: 'Adopt the pending version the user reviewed.',
+        parameters: [{ name: 'sha256', description: 'hash of the version shown to the user; guards against a newer version arriving in between.' }],
+        returns: 'the state after adoption.',
+        throws: ['Error when no pending version has this hash.'],
+      },
+    ],
+  },
+  {
     key: 'web',
     summary: 'The web access service.',
     description: 'The web access service. Registered as `ctx.web` (one instance per context).\n\nSelection semantics (resolved at execution time, never order-dependent):\n\n- A configured id that is registered and `available()` → that provider.\n- A configured id not registered → `WEB_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable → `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No id configured, exactly one registered usable provider → that provider.\n- No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.',
@@ -4217,6 +4375,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Create a fresh branch and checkout at a pinned local revision, then enter it. Existing branches or checkout paths fail. Uncommitted files stay in the source checkout. Checkout disables configured clean, smudge, and process filters without changing Git config. Repository-local replacement refs still apply; baseCommit reports the resolved object name. The new checkout becomes current only after Git setup succeeds. Failures may retain newly allocated Git/filesystem artifacts; no branch or checkout is removed automatically.',
         parameters: [{ name: 'agent', description: 'caller whose current directory selects the source repository and file policy.' }, { name: 'request', description: 'optional new name and local revision; defaults are generated name and HEAD.' }, { name: 'signal', description: 'cancellation of lookup, creation, and working-directory publication.' }],
         returns: 'canonical checkout path, branch name, pinned commit, and source repository root.',
+      },
+      {
+        signature: 'async prepare(agent: Agent, request: CreateWorktreeRequest = {}, signal?: AbortSignal): Promise<CreatedWorktree>',
+        description: 'Create a fresh branch and checkout exactly as create does, but leave the caller\'s working directory unchanged so another Session can start in the returned path.',
+        parameters: [{ name: 'agent', description: 'caller whose current directory selects the source repository and file policy.' }, { name: 'request', description: 'optional new name and local revision; defaults are generated name and HEAD.' }, { name: 'signal', description: 'cancellation of lookup and creation.' }],
+        returns: 'checkout path in the filesystem provider\'s execution world, branch name, pinned commit, and source repository root.',
       },
     ],
   },
@@ -4913,20 +5077,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AccountDetails {\n    readonly profile: {\n        readonly status: \'ready\';\n        readonly value: AccountProfile;\n    } | {\n        readonly status: \'failed\';\n    };\n    readonly balance: {\n        readonly status: \'ready\';\n        readonly value: readonly AccountWallet[];\n        readonly bonusWallets: readonly AccountWallet[];\n    } | {\n        readonly status: \'failed\';\n    };\n}',
   },
   {
-    name: 'AccountLinks',
-    declaration: 'export interface AccountLinks {\n    readonly usageUrl: string;\n    readonly topUpUrl: string;\n}',
+    name: 'AccountInput',
+    declaration: 'export interface AccountInput {\n    username: string;\n    secret: string;\n}',
   },
   {
     name: 'AccountProfile',
     declaration: 'export interface AccountProfile {\n    readonly id: AccountUserId | null;\n    readonly name: string | null;\n    readonly contact: string | null;\n    readonly avatarUrl?: string | null;\n}',
   },
   {
-    name: 'AccountUserId',
-    declaration: 'export type AccountUserId = Branded<\'AccountUserId\'>;',
+    name: 'AccountTestResult',
+    declaration: 'export type AccountTestResult = {\n    readonly ok: true;\n    readonly status: number;\n} | {\n    readonly ok: false;\n    readonly reason: \'unsupported\' | \'not-configured\' | \'unreachable\';\n} | {\n    readonly ok: false;\n    readonly reason: \'unauthorized\' | \'unexpected-status\';\n    readonly status: number;\n};',
   },
   {
-    name: 'AccountView',
-    declaration: 'export interface AccountView {\n    readonly status: \'signed-out\' | \'credential-stored\';\n    readonly links: AccountLinks;\n    readonly attempt: SignInAttemptView | null;\n}',
+    name: 'AccountUserId',
+    declaration: 'export type AccountUserId = Branded<\'AccountUserId\'>;',
   },
   {
     name: 'AccountWallet',
@@ -5429,6 +5593,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ConnectionTrustRequest {\n    readonly headers: Headers | Readonly<Record<string, string | readonly string[] | undefined>>;\n}',
   },
   {
+    name: 'ConnectorKind',
+    declaration: 'export type ConnectorKind = \'redmine\' | \'jira\' | \'gerrit\' | \'svn\' | \'jenkins\' | \'feishu\' | \'wiki\';',
+  },
+  {
+    name: 'ConnectorSettings',
+    declaration: 'export interface ConnectorSettings {\n    kind: ConnectorKind;\n    url: string;\n    writePolicy: ConnectorWritePolicy;\n}',
+  },
+  {
+    name: 'ConnectorWritePolicy',
+    declaration: 'export type ConnectorWritePolicy = \'paste-only\' | \'approve-each\' | \'read-only\';',
+  },
+  {
     name: 'ContentBlockMap',
     declaration: 'export interface ContentBlockMap {\n    \'text\': TextBlock;\n    \'reasoning\': ReasoningBlock;\n    \'image\': ImageBlock;\n    \'file\': FileBlock;\n    \'tool-call\': ToolCallBlock;\n    \'tool-addition\': ToolAdditionBlock;\n    \'tool-removal\': ToolRemovalBlock;\n}',
   },
@@ -5677,6 +5853,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DirectoryRegistrationHandle {\n    (): void;\n    replace(entries: readonly LlmConfigurableProvider[]): void;\n}',
   },
   {
+    name: 'DispatchInput',
+    declaration: 'export interface DispatchInput {\n    readonly ticket: string;\n    readonly title: string;\n    readonly kind: FleetTaskKind;\n    readonly instructions: string;\n}',
+  },
+  {
+    name: 'DispatchResult',
+    declaration: 'export interface DispatchResult {\n    readonly taskId: VflowTaskId;\n    readonly status: FleetTaskView[\'status\'];\n    readonly branch?: string;\n    readonly reason?: string;\n}',
+  },
+  {
     name: 'Domain',
     declaration: 'export interface Domain<S extends DomainSpec> {\n    readonly name: string;\n    readonly global: DomainGlobalHandleOf<S>;\n    table<N extends keyof S[\'tables\'] & string>(name: N): KvTable<TableKeyOf<S, N>, TableValueOf<S, N>>;\n    close(): Promise<void>;\n}',
   },
@@ -5777,6 +5961,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface EveryScheduleRecord {\n    readonly id: ScheduleId;\n    readonly kind: \'every\';\n    readonly title: string;\n    readonly prompt: string;\n    readonly everySeconds: number;\n    readonly scheduledAt: string;\n}',
   },
   {
+    name: 'ExecutorSettings',
+    declaration: 'export interface ExecutorSettings {\n    by: \'claude\' | \'droid\' | \'toder\' | \'pi\' | \'human\' | \'script\';\n    model: string;\n    effort: \'none\' | \'low\' | \'medium\' | \'high\' | \'xhigh\' | \'max\';\n}',
+  },
+  {
     name: 'FeedbackCategory',
     declaration: 'export type FeedbackCategory = \'task-result\' | \'instruction-following\' | \'product-interaction\' | \'service-stability\' | \'resource-cost\' | \'security-privacy-permission\' | \'other\';',
   },
@@ -5819,6 +6007,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'FinishReasonMap',
     declaration: 'export interface FinishReasonMap {\n    \'stop\': {\n        kind: \'stop\';\n    };\n    \'tool-calls\': {\n        kind: \'tool-calls\';\n    };\n    \'max-tokens\': {\n        kind: \'max-tokens\';\n    };\n    \'aborted\': {\n        kind: \'aborted\';\n        failure: LlmFailure;\n    };\n    \'error\': {\n        kind: \'error\';\n        failure: LlmFailure;\n    };\n}',
+  },
+  {
+    name: 'FleetDecision',
+    declaration: 'export interface FleetDecision {\n    readonly id: VflowDecisionId;\n    readonly question: string;\n    readonly options: readonly string[];\n    readonly askedAt: number;\n}',
+  },
+  {
+    name: 'FleetTaskKind',
+    declaration: 'export type FleetTaskKind = \'ship\' | \'scout\';',
+  },
+  {
+    name: 'FleetTaskStatus',
+    declaration: 'export type FleetTaskStatus = \'queued\' | \'running\' | \'waiting\' | \'completed\' | \'failed\' | \'cancelled\';',
+  },
+  {
+    name: 'FleetTaskView',
+    declaration: 'export interface FleetTaskView {\n    readonly taskId: VflowTaskId;\n    readonly ticket: string;\n    readonly title: string;\n    readonly kind: FleetTaskKind;\n    readonly status: FleetTaskStatus;\n    readonly childId?: SessionId | undefined;\n    readonly branch?: string | undefined;\n    readonly node: VModelNode;\n    readonly activity?: string | undefined;\n    readonly updatedAt: number;\n    readonly queuedAt: number;\n    readonly startedAt?: number | undefined;\n    readonly finishedAt?: number | undefined;\n    readonly decision?: FleetDecision | undefined;\n    readonly summary?: string | undefined;\n}',
   },
   {
     name: 'FrequencyTooHighError',
@@ -6673,6 +6877,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PaneOpenResult {\n    id: string;\n    isPlaced: boolean;\n    reason?: string;\n}',
   },
   {
+    name: 'ParsedTeamSettings',
+    declaration: 'export interface ParsedTeamSettings {\n    readonly settings: TeamSettings;\n    readonly text: string;\n    readonly sha256: string;\n}',
+  },
+  {
     name: 'PeerAdmission',
     declaration: 'export type PeerAdmission = {\n    readonly peer: PeerScope;\n} | {\n    readonly rejection: 401 | 403;\n};',
   },
@@ -6895,6 +7103,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ProjectionSnapshot',
     declaration: 'export interface ProjectionSnapshot {\n    asOfSeq: SessionSeqCursor;\n    values: Partial<SessionProjectionMap>;\n}',
+  },
+  {
+    name: 'ProjectSettings',
+    declaration: 'export interface ProjectSettings {\n    id: string;\n    displayName: string;\n    ticketPrefix: string;\n    filePrefix: string;\n}',
   },
   {
     name: 'PromptAssembly',
@@ -7183,6 +7395,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ResolvedToolSet',
     declaration: 'export interface ResolvedToolSet {\n    dispose(): void;\n    view(scope: ScopeKey | undefined): ReadonlyMap<string, ToolDefinition>;\n}',
+  },
+  {
+    name: 'ResourceSettings',
+    declaration: 'export interface ResourceSettings {\n    lock: string;\n}',
   },
   {
     name: 'RestartReason',
@@ -8017,14 +8233,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type SignInAttemptId = Branded<\'SignInAttemptId\'>;',
   },
   {
-    name: 'SignInAttemptView',
-    declaration: 'export interface SignInAttemptView {\n    readonly id: SignInAttemptId;\n    readonly phase: \'initializing\' | \'waiting-browser\' | \'exchanging\' | \'committing\' | \'succeeded\' | \'cancelled\' | \'expired\' | \'failed\';\n    readonly authorizeUrl?: string;\n    readonly expiresAt?: number;\n    readonly errorCode?: SignInErrorCode;\n}',
-  },
-  {
-    name: 'SignInErrorCode',
-    declaration: 'export type SignInErrorCode = \'no-response\' | \'network\' | \'protocol\' | \'expired\' | \'storage\';',
-  },
-  {
     name: 'SkillCandidate',
     declaration: 'export interface SkillCandidate extends SkillSummary {\n    readonly rank: number;\n    readonly locator: unknown;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
   },
@@ -8423,6 +8631,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TeamMemberView',
     declaration: 'export interface TeamMemberView {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly role: \'lead\' | \'teammate\';\n    readonly status: \'running\' | \'inactive\' | \'provisioning\' | \'failed\';\n    readonly description?: string;\n    readonly provider?: string;\n    readonly context?: \'fresh\' | \'fork\';\n    readonly model?: string;\n    readonly diagnostics: string[];\n}',
+  },
+  {
+    name: 'TeamSettings',
+    declaration: 'export interface TeamSettings {\n    format: typeof TEAM_SETTINGS_FORMAT;\n    version: typeof TEAM_SETTINGS_VERSION;\n    name: string;\n    connectors: Record<string, ConnectorSettings>;\n    projects: ProjectSettings[];\n    nameFormat: string;\n    docRules: Record<string, string | number | boolean>;\n    resources: Record<string, ResourceSettings>;\n    executors: Record<string, ExecutorSettings>;\n    defaultReviewer: string;\n}',
+  },
+  {
+    name: 'TeamSettingsState',
+    declaration: 'export type TeamSettingsState = {\n    readonly status: \'unconfigured\';\n} | {\n    readonly status: \'ready\';\n    readonly current: ParsedTeamSettings;\n    readonly pending?: ParsedTeamSettings;\n    readonly sourceError?: Error;\n} | {\n    readonly status: \'failed\';\n    readonly error: Error;\n};',
+  },
+  {
+    name: 'TeamSettingsSummary',
+    declaration: 'export interface TeamSettingsSummary {\n    readonly name: string;\n    readonly sha256: string;\n    readonly connectorCount: number;\n    readonly projects: readonly string[];\n    readonly defaultReviewer: string;\n}',
+  },
+  {
+    name: 'TeamSettingsView',
+    declaration: 'export type TeamSettingsView = {\n    readonly status: \'unconfigured\';\n    readonly source: string;\n} | {\n    readonly status: \'failed\';\n    readonly source: string;\n    readonly error: string;\n} | {\n    readonly status: \'ready\';\n    readonly source: string;\n    readonly current: TeamSettingsSummary;\n    readonly pending?: TeamSettingsSummary;\n    readonly sourceError?: string;\n};',
   },
   {
     name: 'TeamTaskAction',
@@ -8963,6 +9187,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'VerifiedWebhookDelivery',
     declaration: 'export interface VerifiedWebhookDelivery<K extends string = string> {\n    readonly kind: K;\n    readonly source: WebhookSourceId;\n    readonly deliveryId: WebhookDeliveryId;\n    readonly event: WebhookEventOf<K>;\n    readonly receivedAt: number;\n}',
+  },
+  {
+    name: 'VflowDecisionId',
+    declaration: 'export type VflowDecisionId = Branded<\'VflowDecisionId\'>;',
+  },
+  {
+    name: 'VflowTaskId',
+    declaration: 'export type VflowTaskId = Branded<\'VflowTaskId\'>;',
+  },
+  {
+    name: 'VModelNode',
+    declaration: 'export type VModelNode = typeof V_MODEL_NODES[number];',
   },
   {
     name: 'WebBootBatch',

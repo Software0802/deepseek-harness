@@ -6,6 +6,9 @@
  */
 
 import type {} from '@deepseek-ai/dsh-typert-protocol'
+import type { Branded } from '@deepseek-ai/dsh-brand'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SessionProjectionSummaryExcluded } from '@deepseek-ai/dsh-session-projection/types'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
@@ -15,6 +18,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'vflow/invalid-account': { readonly connectorId: string }
     /** The reviewed team settings version is no longer the pending one. */
     'vflow/no-pending-version': { readonly sha256: string }
+    /** The lead Session is not loaded in this Host. */
+    'vflow/lead-unavailable': { readonly leadSessionId: string }
+    /** The fleet task does not exist or no longer waits for this decision. */
+    'vflow/no-pending-decision': { readonly taskId: string; readonly decisionId: string }
   }
 }
 
@@ -80,3 +87,69 @@ export type TeamSettingsView =
     /** Why the last source check failed while the adopted version stays in use. */
     readonly sourceError?: string
   }
+
+/** Identity of one fleet task within its lead Session. */
+export type VflowTaskId = Branded<'VflowTaskId'>
+
+/** Identity of one decision a fleet task asked for. */
+export type VflowDecisionId = Branded<'VflowDecisionId'>
+
+/** `ship` changes code in its own Git worktree; `scout` only reads and reports. */
+export type FleetTaskKind = 'ship' | 'scout'
+
+/** V-model stages in order: the left arm descends to coding, the right arm climbs through testing. */
+export const V_MODEL_NODES = [
+  'requirements', 'basic-design', 'detailed-design', 'coding', 'unit-test', 'integration-test', 'system-test',
+] as const
+
+/** One V-model stage. */
+export type VModelNode = typeof V_MODEL_NODES[number]
+
+/**
+ * Lifecycle of a fleet task. `queued` waits for a free slot, `waiting` holds an
+ * unanswered decision, and the three terminal states follow the child's last run.
+ */
+export type FleetTaskStatus = 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled'
+
+/** A question a fleet task put to the user. */
+export interface FleetDecision {
+  readonly id: VflowDecisionId
+  readonly question: string
+  /** Two to four answers in the order the task offered them. */
+  readonly options: readonly string[]
+  /** Epoch milliseconds when the task asked. */
+  readonly askedAt: number
+}
+
+/** One fleet task as the lead Session's log records it. */
+export interface FleetTaskView {
+  readonly taskId: VflowTaskId
+  readonly ticket: string
+  readonly title: string
+  readonly kind: FleetTaskKind
+  readonly status: FleetTaskStatus
+  /** Child Session doing the work; absent while queued or when it could not start. */
+  readonly childId?: SessionId | undefined
+  /** Branch of the task's worktree; ship tasks only. */
+  readonly branch?: string | undefined
+  /** Current V-model stage. */
+  readonly node: VModelNode
+  /** Latest activity line the task reported. */
+  readonly activity?: string | undefined
+  /** Epoch milliseconds of the latest report, start, or answer. */
+  readonly updatedAt: number
+  readonly queuedAt: number
+  readonly startedAt?: number | undefined
+  readonly finishedAt?: number | undefined
+  /** Present while `status` is `waiting`. */
+  readonly decision?: FleetDecision | undefined
+  /** Final summary or failure reason, at most 500 characters. */
+  readonly summary?: string | undefined
+}
+
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionMap {
+    /** Fleet tasks of a lead Session in dispatch order. */
+    vflowFleet: SessionProjectionSummaryExcluded<FleetTaskView[]>
+  }
+}

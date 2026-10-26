@@ -219,7 +219,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-experimental-tool-subagent-oar` | yes | Delegate standalone tasks to configured external subagent providers |
 | `@deepseek-ai/dsh-experimental-tool-worktree` | no | Model tool that creates and enters a new Git worktree |
 | `@deepseek-ai/dsh-experimental-translator` | yes | Machine translation with reusable Session results |
-| `@deepseek-ai/dsh-experimental-vflow-skills` | yes | vflow skill pack: the first-mate working rules and V-model workflow skills as a bundled skill provider |
+| `@deepseek-ai/dsh-experimental-vflow-skills` | yes | 日系开发工作流: the first-mate working rules, V-model workflow skills, team settings, connector accounts, and a fleet panel for dispatched tickets |
 | `@deepseek-ai/dsh-experimental-worktree` | yes | Creates a named Git worktree and changes the calling Session working directory |
 | `@deepseek-ai/dsh-hooks-claude-code` | yes | Bridge plugin: run a Claude Code hooks.json / settings hook config on the DeepSeek Harness interception seams |
 | `@deepseek-ai/dsh-hooks-codex` | yes | Bridge plugin: run a Codex hooks.json hook config on the DeepSeek Harness interception seams |

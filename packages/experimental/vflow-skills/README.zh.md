@@ -39,6 +39,9 @@ kind: "package-bundle"
 | `teamSettings.stateFile` | 组合包中为 `~/.dsh/vflow/team-settings.json` | 已采用副本的绝对路径 |
 | `teamSettings.fetchTimeoutMs` | `10000` | 单次获取来源的时间上限 |
 | `accounts.probeTimeoutMs` | `10000` | 单次连接测试的时间上限 |
+| `fleet.maxParallel` | `3` | 同一主会话同时运行的任务数；其余任务排队 |
+| `fleet.provider` | `spawn` | 启动可续接子会话的子智能体 provider |
+| `fleet.branchPrefix` | `vflow/` | 出航任务分支名前缀，后接工单号和短任务 id |
 
 ### 设置页与安装向导
 
@@ -65,6 +68,12 @@ kind: "package-bundle"
 `feishu`、`wiki` 以及 `ssh://` 等非 HTTP 地址报告 `unsupported`。请求不跟随重定向，因此跳转到登录页会报告 `unexpected-status`。
 
 当前随附 `vflow-first-mate`：第一个 agent 只拆分工作、把改动委派给工人、核对证据，并在合并、推送以及写入工单或仓库前询问用户。
+
+### 舰队
+
+主智能体用 `vflow_dispatch` 派发工单。`ship`（出航）任务在分支 `<branchPrefix><工单号>-<短 id>` 上获得独立的 Git worktree，并在该检出目录中启动可续接的子会话；`scout`（侦察）任务在主智能体目录中启动子会话，指令要求它只读取和报告，但这一限制不会被强制执行。出航任务需要 `@deepseek-ai/dsh-experimental-worktree`。同一主会话最多同时运行 `maxParallel` 个任务，其余按派发顺序排队。子会话调用 `vflow_report` 报告所处 V 字阶段和当前动作，调用 `vflow_request_decision` 向用户提出带 2 到 4 个选项的问题；随后子会话结束本轮，用户的回答作为下一条消息让它继续。
+
+每次派发、上报、决策、回答和结束都是主会话中的插件记录，`vflowFleet` 投影把它们折叠成任务列表，因此面板在重新加载后保持不变。右侧边栏的 **舰队** 标签页依次显示计数、待用户决定的决策、带 V 字图、进度、用时和 token 的运行中任务、排队任务，以及带结果或失败原因的已结束任务。点击选项即回答决策；点击任务会在新窗格打开它的子对话。
 
 -----
 
@@ -119,6 +128,7 @@ kind: "package-bundle"
 - **只支持 Basic 认证**——Jira Cloud token、Gerrit SSH、飞书和 wiki 连接器还没有连接测试。
 - **没有定时检查更新**——只在启动时、发布地址变更时和点击 **检查更新** 时检查来源。
 - **守则只是指引**——副手守则是模型指令；仓库与工单写入的闸门强制由 vflow 工作流引擎提供。
+- **侦察限制只是指引**——侦察任务与出航任务拥有相同的工具，只有指令让它保持只读。
 
 <a id="dev-note"></a>
 ### 开发备注

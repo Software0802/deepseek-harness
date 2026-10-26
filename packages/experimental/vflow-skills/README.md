@@ -39,6 +39,9 @@ Turn on **Japanese-style development workflow** in the GUI plugin manager, or mo
 | `teamSettings.stateFile` | `~/.dsh/vflow/team-settings.json` in the bundle | Absolute path of the adopted copy |
 | `teamSettings.fetchTimeoutMs` | `10000` | Time limit for one fetch of the source |
 | `accounts.probeTimeoutMs` | `10000` | Time limit for one connection test |
+| `fleet.maxParallel` | `3` | Tasks of one lead Session that run at the same time; later tasks queue |
+| `fleet.provider` | `spawn` | Subagent provider that starts continuable children |
+| `fleet.branchPrefix` | `vflow/` | Prefix of ship-task branch names, followed by the ticket and a short task id |
 
 ### Settings page and setup guide
 
@@ -65,6 +68,12 @@ Each user saves their own login for every connector the adopted team settings na
 `feishu`, `wiki`, and any non-HTTP address such as `ssh://` report `unsupported`. Redirects are not followed, so a login page redirect reports `unexpected-status`.
 
 The pack currently ships `vflow-first-mate`: the first agent only splits work, delegates changes to workers, verifies evidence, and asks the user before merges, pushes, and ticket or repository writes.
+
+### Fleet
+
+The lead agent dispatches tickets with `vflow_dispatch`. A `ship` task gets its own Git worktree on branch `<branchPrefix><ticket>-<short id>` and a continuable child Session started in that checkout; a `scout` task starts a child in the lead's directory whose instructions limit it to reading and reporting; nothing enforces that limit. Ship tasks require `@deepseek-ai/dsh-experimental-worktree`. At most `maxParallel` tasks of one lead run at once, and later tasks queue in dispatch order. Children call `vflow_report` to name their V-model stage and current activity, and `vflow_request_decision` to ask the user a question with two to four options; the child's run then ends and the answer resumes it as its next message.
+
+Every dispatch, report, decision, answer, and end is a plugin record in the lead Session, and the `vflowFleet` projection folds them into the task list, so the panel survives reloads. The **Fleet** tab in the right Sidebar shows counts, then decisions waiting for the user, running tasks with their V-model chart, progress, time, and tokens, queued tasks, and finished tasks with their outcome or failure reason. Pressing an option answers the decision; selecting a task opens its child chat in a new pane.
 
 -----
 
@@ -119,6 +128,7 @@ The catalog changes only when the package changes, so it keeps an existing cache
 - **Basic authentication only** — Jira Cloud tokens, Gerrit SSH, Feishu, and wiki connectors have no connection test yet.
 - **No periodic update check** — the source is checked at startup, when its address changes, and on **Check for updates**.
 - **Rules are guidance** — the first-mate rules are model instructions; gate enforcement for repository and ticket writes arrives with the vflow workflow engine.
+- **Scout limits are guidance** — scout tasks get the same tools as ship tasks; only their instructions keep them read-only.
 
 <a id="dev-note"></a>
 ### Dev Note

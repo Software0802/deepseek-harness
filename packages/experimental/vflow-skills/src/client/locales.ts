@@ -35,6 +35,18 @@ export const en = {
   checkPassed: 'Passed', checkMissing: 'Not yet', runChecks: 'Run checks',
   doneTitle: 'All set', doneBody: 'The workflow skills now use your team settings and accounts. You can change both on this page at any time.',
   operationFailed: 'The operation failed. {error}',
+  fleetTitle: 'Fleet', fleetGuideDescription: 'Follow the tasks the lead dispatched and answer their questions.', fleetSubtitle: '{count} tasks in this conversation', fleetEmptyTitle: 'No fleet tasks yet',
+  fleetEmptyBody: 'Ask the lead to dispatch tickets in the conversation, for example “ship ABC-123 and scout ABC-124”.', fleetStatRunning: 'Running', fleetStatWaiting: 'Needs you', fleetStatQueued: 'Queued',
+  fleetStatDone: 'Done', fleetSectionWaiting: 'Needs your decision', fleetSectionRunning: 'Running', fleetSectionQueued: 'Queued',
+  fleetSectionFinished: 'Finished', fleetKindShip: 'Ship', fleetKindScout: 'Scout', fleetWaitingFor: 'Waiting {duration}',
+  fleetWaitingNow: 'Just asked',
+  fleetRunningFor: 'Running {duration}', fleetMetaBranch: 'Branch', fleetMetaTime: 'Time', fleetMetaStage: 'Stage',
+  fleetTokens: '{value} tokens', fleetThousand: '{value}k', fleetMillion: '{value}M', fleetNodeRequirements: 'Requirements',
+  fleetNodeBasicDesign: 'Basic design', fleetNodeDetailedDesign: 'Detailed design', fleetNodeCoding: 'Coding', fleetNodeUnitTest: 'Unit test',
+  fleetNodeIntegrationTest: 'Integration test', fleetNodeSystemTest: 'System test', fleetStarting: 'Starting', fleetJustNow: 'just now',
+  fleetAgo: '{duration} ago', fleetMinutes: '{value} min', fleetHours: '{value} h', fleetQueuedHint: 'Waits for a free slot',
+  fleetOutcomeCompleted: 'Completed', fleetOutcomeFailed: 'Failed', fleetOutcomeCancelled: 'Cancelled', fleetWatch: 'Watch this task beside the conversation',
+  fleetAnswerFailed: 'The answer was not delivered. {error}', fleetSlots: 'Slots', fleetTotalTokens: '{value} tokens in total',
 }
 
 /** Locale dictionary key union. */
@@ -72,6 +84,18 @@ export const zh: Record<VflowKey, string> = {
   checkPassed: '通过', checkMissing: '未完成', runChecks: '开始检查',
   doneTitle: '配置完成', doneBody: '工作流技能已在使用你的团队设置和账号，之后随时可以在本页修改。',
   operationFailed: '操作失败。{error}',
+  fleetTitle: '舰队', fleetGuideDescription: '跟进副手派出的任务，回答它们的问题。', fleetSubtitle: '本对话 {count} 个任务', fleetEmptyTitle: '还没有舰队任务',
+  fleetEmptyBody: '在对话里让副手派工，例如“把 ABC-123 派出去做，ABC-124 先侦察一下”。', fleetStatRunning: '运行中', fleetStatWaiting: '待你决定', fleetStatQueued: '排队',
+  fleetStatDone: '已完成', fleetSectionWaiting: '需要你决定', fleetSectionRunning: '运行中', fleetSectionQueued: '排队',
+  fleetSectionFinished: '已结束', fleetKindShip: '出航', fleetKindScout: '侦察', fleetWaitingFor: '等待 {duration}',
+  fleetWaitingNow: '刚提出',
+  fleetRunningFor: '已运行 {duration}', fleetMetaBranch: '分支', fleetMetaTime: '用时', fleetMetaStage: '阶段',
+  fleetTokens: '{value} tokens', fleetThousand: '{value}k', fleetMillion: '{value}M', fleetNodeRequirements: '需求定义',
+  fleetNodeBasicDesign: '基本设计', fleetNodeDetailedDesign: '详细设计', fleetNodeCoding: '编码', fleetNodeUnitTest: '单体测试',
+  fleetNodeIntegrationTest: '结合测试', fleetNodeSystemTest: '综合测试', fleetStarting: '正在启动', fleetJustNow: '刚刚',
+  fleetAgo: '{duration}前', fleetMinutes: '{value} 分钟', fleetHours: '{value} 小时', fleetQueuedHint: '等空闲工作区',
+  fleetOutcomeCompleted: '已完成', fleetOutcomeFailed: '失败', fleetOutcomeCancelled: '已取消', fleetWatch: '在对话旁边旁观这个任务',
+  fleetAnswerFailed: '回答没有送达。{error}', fleetSlots: '工作区', fleetTotalTokens: '共 {value} tokens',
 }
 
 /** Japanese copy. */
@@ -106,6 +130,18 @@ export const ja: Record<VflowKey, string> = {
   checkPassed: '合格', checkMissing: '未完了', runChecks: 'チェックを実行',
   doneTitle: '準備完了', doneBody: 'ワークフロースキルがチーム設定とアカウントを使用しています。このページでいつでも変更できます。',
   operationFailed: '操作に失敗しました。{error}',
+  fleetTitle: 'フリート', fleetGuideDescription: 'リードが割り振ったタスクを追い、質問に答えます。', fleetSubtitle: 'この会話のタスク {count} 件', fleetEmptyTitle: 'フリートのタスクはまだありません',
+  fleetEmptyBody: '会話でリードにチケットの割り振りを頼んでください。例：「ABC-123 を実装に出して、ABC-124 は先に調査して」。', fleetStatRunning: '実行中', fleetStatWaiting: '判断待ち', fleetStatQueued: '待機中',
+  fleetStatDone: '完了', fleetSectionWaiting: 'あなたの判断が必要', fleetSectionRunning: '実行中', fleetSectionQueued: '待機中',
+  fleetSectionFinished: '終了', fleetKindShip: '実装', fleetKindScout: '調査', fleetWaitingFor: '{duration} 待機中',
+  fleetWaitingNow: '質問したばかり',
+  fleetRunningFor: '{duration} 実行中', fleetMetaBranch: 'ブランチ', fleetMetaTime: '所要時間', fleetMetaStage: '工程',
+  fleetTokens: '{value} tokens', fleetThousand: '{value}k', fleetMillion: '{value}M', fleetNodeRequirements: '要件定義',
+  fleetNodeBasicDesign: '基本設計', fleetNodeDetailedDesign: '詳細設計', fleetNodeCoding: 'コーディング', fleetNodeUnitTest: '単体テスト',
+  fleetNodeIntegrationTest: '結合テスト', fleetNodeSystemTest: '総合テスト', fleetStarting: '起動中', fleetJustNow: 'たった今',
+  fleetAgo: '{duration}前', fleetMinutes: '{value} 分', fleetHours: '{value} 時間', fleetQueuedHint: '空きスロット待ち',
+  fleetOutcomeCompleted: '完了', fleetOutcomeFailed: '失敗', fleetOutcomeCancelled: 'キャンセル', fleetWatch: '会話の横でこのタスクを見る',
+  fleetAnswerFailed: '回答を届けられませんでした。{error}', fleetSlots: 'スロット', fleetTotalTokens: '合計 {value} tokens',
 }
 
 /** German copy. */
@@ -140,6 +176,18 @@ export const de: Record<VflowKey, string> = {
   checkPassed: 'Bestanden', checkMissing: 'Noch nicht', runChecks: 'Prüfung starten',
   doneTitle: 'Alles bereit', doneBody: 'Die Workflow-Skills verwenden jetzt Ihre Teameinstellungen und Konten. Sie können beides jederzeit auf dieser Seite ändern.',
   operationFailed: 'Der Vorgang ist fehlgeschlagen. {error}',
+  fleetTitle: 'Flotte', fleetGuideDescription: 'Verfolgen Sie die vom Lead verteilten Aufgaben und beantworten Sie ihre Fragen.', fleetSubtitle: '{count} Aufgaben in diesem Gespräch', fleetEmptyTitle: 'Noch keine Flottenaufgaben',
+  fleetEmptyBody: 'Bitten Sie den Lead im Gespräch, Tickets zu verteilen, zum Beispiel „setze ABC-123 um und erkunde ABC-124“.', fleetStatRunning: 'Läuft', fleetStatWaiting: 'Wartet auf Sie', fleetStatQueued: 'Wartend',
+  fleetStatDone: 'Fertig', fleetSectionWaiting: 'Ihre Entscheidung ist nötig', fleetSectionRunning: 'Läuft', fleetSectionQueued: 'Wartend',
+  fleetSectionFinished: 'Beendet', fleetKindShip: 'Umsetzen', fleetKindScout: 'Erkunden', fleetWaitingFor: 'Wartet seit {duration}',
+  fleetWaitingNow: 'Gerade gefragt',
+  fleetRunningFor: 'Läuft seit {duration}', fleetMetaBranch: 'Branch', fleetMetaTime: 'Dauer', fleetMetaStage: 'Phase',
+  fleetTokens: '{value} Tokens', fleetThousand: '{value}k', fleetMillion: '{value}M', fleetNodeRequirements: 'Anforderungen',
+  fleetNodeBasicDesign: 'Grobentwurf', fleetNodeDetailedDesign: 'Feinentwurf', fleetNodeCoding: 'Programmierung', fleetNodeUnitTest: 'Unittest',
+  fleetNodeIntegrationTest: 'Integrationstest', fleetNodeSystemTest: 'Systemtest', fleetStarting: 'Startet', fleetJustNow: 'gerade eben',
+  fleetAgo: 'vor {duration}', fleetMinutes: '{value} Min.', fleetHours: '{value} Std.', fleetQueuedHint: 'Wartet auf einen freien Platz',
+  fleetOutcomeCompleted: 'Abgeschlossen', fleetOutcomeFailed: 'Fehlgeschlagen', fleetOutcomeCancelled: 'Abgebrochen', fleetWatch: 'Diese Aufgabe neben dem Gespräch ansehen',
+  fleetAnswerFailed: 'Die Antwort wurde nicht zugestellt. {error}', fleetSlots: 'Plätze', fleetTotalTokens: 'Insgesamt {value} Tokens',
 }
 
 /** Spanish copy. */
@@ -174,6 +222,18 @@ export const es: Record<VflowKey, string> = {
   checkPassed: 'Superado', checkMissing: 'Pendiente', runChecks: 'Ejecutar comprobaciones',
   doneTitle: 'Todo listo', doneBody: 'Las habilidades del flujo de trabajo ya usan tus ajustes del equipo y tus cuentas. Puedes cambiarlos en esta página cuando quieras.',
   operationFailed: 'La operación falló. {error}',
+  fleetTitle: 'Flota', fleetGuideDescription: 'Sigue las tareas que repartió el líder y responde a sus preguntas.', fleetSubtitle: '{count} tareas en esta conversación', fleetEmptyTitle: 'Aún no hay tareas de la flota',
+  fleetEmptyBody: 'Pide al líder en la conversación que reparta tickets, por ejemplo «implementa ABC-123 e investiga ABC-124».', fleetStatRunning: 'En curso', fleetStatWaiting: 'Te necesita', fleetStatQueued: 'En cola',
+  fleetStatDone: 'Hecho', fleetSectionWaiting: 'Necesita tu decisión', fleetSectionRunning: 'En curso', fleetSectionQueued: 'En cola',
+  fleetSectionFinished: 'Terminadas', fleetKindShip: 'Implementar', fleetKindScout: 'Investigar', fleetWaitingFor: 'Esperando {duration}',
+  fleetWaitingNow: 'Recién preguntado',
+  fleetRunningFor: 'En curso {duration}', fleetMetaBranch: 'Rama', fleetMetaTime: 'Tiempo', fleetMetaStage: 'Etapa',
+  fleetTokens: '{value} tokens', fleetThousand: '{value} k', fleetMillion: '{value} M', fleetNodeRequirements: 'Requisitos',
+  fleetNodeBasicDesign: 'Diseño básico', fleetNodeDetailedDesign: 'Diseño detallado', fleetNodeCoding: 'Codificación', fleetNodeUnitTest: 'Prueba unitaria',
+  fleetNodeIntegrationTest: 'Prueba de integración', fleetNodeSystemTest: 'Prueba de sistema', fleetStarting: 'Iniciando', fleetJustNow: 'ahora mismo',
+  fleetAgo: 'hace {duration}', fleetMinutes: '{value} min', fleetHours: '{value} h', fleetQueuedHint: 'Espera un hueco libre',
+  fleetOutcomeCompleted: 'Completada', fleetOutcomeFailed: 'Fallida', fleetOutcomeCancelled: 'Cancelada', fleetWatch: 'Ver esta tarea junto a la conversación',
+  fleetAnswerFailed: 'La respuesta no se entregó. {error}', fleetSlots: 'Huecos', fleetTotalTokens: '{value} tokens en total',
 }
 
 /** French copy. */
@@ -208,6 +268,18 @@ export const fr: Record<VflowKey, string> = {
   checkPassed: 'Réussi', checkMissing: 'Pas encore', runChecks: 'Lancer les vérifications',
   doneTitle: 'Tout est prêt', doneBody: 'Les compétences du flux de travail utilisent désormais vos paramètres d’équipe et vos comptes. Vous pouvez les modifier sur cette page à tout moment.',
   operationFailed: 'L’opération a échoué. {error}',
+  fleetTitle: 'Flotte', fleetGuideDescription: 'Suivez les tâches réparties par le responsable et répondez à leurs questions.', fleetSubtitle: '{count} tâches dans cette conversation', fleetEmptyTitle: 'Aucune tâche de flotte pour l’instant',
+  fleetEmptyBody: 'Demandez au responsable de répartir des tickets dans la conversation, par exemple « réalise ABC-123 et explore ABC-124 ».', fleetStatRunning: 'En cours', fleetStatWaiting: 'Vous attend', fleetStatQueued: 'En file',
+  fleetStatDone: 'Terminé', fleetSectionWaiting: 'Votre décision est requise', fleetSectionRunning: 'En cours', fleetSectionQueued: 'En file',
+  fleetSectionFinished: 'Terminées', fleetKindShip: 'Réaliser', fleetKindScout: 'Explorer', fleetWaitingFor: 'En attente depuis {duration}',
+  fleetWaitingNow: 'Question posée à l’instant',
+  fleetRunningFor: 'En cours depuis {duration}', fleetMetaBranch: 'Branche', fleetMetaTime: 'Durée', fleetMetaStage: 'Étape',
+  fleetTokens: '{value} jetons', fleetThousand: '{value} k', fleetMillion: '{value} M', fleetNodeRequirements: 'Exigences',
+  fleetNodeBasicDesign: 'Conception générale', fleetNodeDetailedDesign: 'Conception détaillée', fleetNodeCoding: 'Codage', fleetNodeUnitTest: 'Test unitaire',
+  fleetNodeIntegrationTest: 'Test d’intégration', fleetNodeSystemTest: 'Test système', fleetStarting: 'Démarrage', fleetJustNow: 'à l’instant',
+  fleetAgo: 'il y a {duration}', fleetMinutes: '{value} min', fleetHours: '{value} h', fleetQueuedHint: 'Attend un emplacement libre',
+  fleetOutcomeCompleted: 'Terminée', fleetOutcomeFailed: 'Échouée', fleetOutcomeCancelled: 'Annulée', fleetWatch: 'Suivre cette tâche à côté de la conversation',
+  fleetAnswerFailed: 'La réponse n’a pas été transmise. {error}', fleetSlots: 'Emplacements', fleetTotalTokens: '{value} jetons au total',
 }
 
 /** Portuguese copy. */
@@ -242,6 +314,18 @@ export const pt: Record<VflowKey, string> = {
   checkPassed: 'Aprovado', checkMissing: 'Pendente', runChecks: 'Executar verificações',
   doneTitle: 'Tudo pronto', doneBody: 'As habilidades do fluxo de trabalho já usam suas configurações da equipe e suas contas. Você pode alterá-las nesta página a qualquer momento.',
   operationFailed: 'A operação falhou. {error}',
+  fleetTitle: 'Frota', fleetGuideDescription: 'Acompanhe as tarefas que o líder distribuiu e responda às perguntas delas.', fleetSubtitle: '{count} tarefas nesta conversa', fleetEmptyTitle: 'Ainda não há tarefas da frota',
+  fleetEmptyBody: 'Peça ao líder na conversa para distribuir tickets, por exemplo “implemente ABC-123 e investigue ABC-124”.', fleetStatRunning: 'Em execução', fleetStatWaiting: 'Precisa de você', fleetStatQueued: 'Na fila',
+  fleetStatDone: 'Concluídas', fleetSectionWaiting: 'Precisa da sua decisão', fleetSectionRunning: 'Em execução', fleetSectionQueued: 'Na fila',
+  fleetSectionFinished: 'Encerradas', fleetKindShip: 'Implementar', fleetKindScout: 'Investigar', fleetWaitingFor: 'Aguardando há {duration}',
+  fleetWaitingNow: 'Pergunta recente',
+  fleetRunningFor: 'Em execução há {duration}', fleetMetaBranch: 'Branch', fleetMetaTime: 'Tempo', fleetMetaStage: 'Etapa',
+  fleetTokens: '{value} tokens', fleetThousand: '{value} mil', fleetMillion: '{value} mi', fleetNodeRequirements: 'Requisitos',
+  fleetNodeBasicDesign: 'Projeto básico', fleetNodeDetailedDesign: 'Projeto detalhado', fleetNodeCoding: 'Codificação', fleetNodeUnitTest: 'Teste unitário',
+  fleetNodeIntegrationTest: 'Teste de integração', fleetNodeSystemTest: 'Teste de sistema', fleetStarting: 'Iniciando', fleetJustNow: 'agora mesmo',
+  fleetAgo: 'há {duration}', fleetMinutes: '{value} min', fleetHours: '{value} h', fleetQueuedHint: 'Aguarda uma vaga livre',
+  fleetOutcomeCompleted: 'Concluída', fleetOutcomeFailed: 'Falhou', fleetOutcomeCancelled: 'Cancelada', fleetWatch: 'Acompanhar esta tarefa ao lado da conversa',
+  fleetAnswerFailed: 'A resposta não foi entregue. {error}', fleetSlots: 'Vagas', fleetTotalTokens: '{value} tokens no total',
 }
 
 /** Russian copy. */
@@ -276,4 +360,16 @@ export const ru: Record<VflowKey, string> = {
   checkPassed: 'Пройдено', checkMissing: 'Ещё нет', runChecks: 'Запустить проверку',
   doneTitle: 'Всё готово', doneBody: 'Навыки рабочего процесса теперь используют ваши настройки команды и учётные записи. Изменить их можно на этой странице в любой момент.',
   operationFailed: 'Операция не удалась. {error}',
+  fleetTitle: 'Флот', fleetGuideDescription: 'Следите за задачами, которые раздал ведущий, и отвечайте на их вопросы.', fleetSubtitle: 'Задач в этом разговоре: {count}', fleetEmptyTitle: 'Задач флота пока нет',
+  fleetEmptyBody: 'Попросите ведущего в разговоре раздать тикеты, например «сделай ABC-123 и исследуй ABC-124».', fleetStatRunning: 'Выполняются', fleetStatWaiting: 'Ждут вас', fleetStatQueued: 'В очереди',
+  fleetStatDone: 'Готово', fleetSectionWaiting: 'Нужно ваше решение', fleetSectionRunning: 'Выполняются', fleetSectionQueued: 'В очереди',
+  fleetSectionFinished: 'Завершены', fleetKindShip: 'Реализация', fleetKindScout: 'Разведка', fleetWaitingFor: 'Ждёт {duration}',
+  fleetWaitingNow: 'Только что спросил',
+  fleetRunningFor: 'Выполняется {duration}', fleetMetaBranch: 'Ветка', fleetMetaTime: 'Время', fleetMetaStage: 'Этап',
+  fleetTokens: '{value} токенов', fleetThousand: '{value} тыс.', fleetMillion: '{value} млн', fleetNodeRequirements: 'Требования',
+  fleetNodeBasicDesign: 'Эскизный проект', fleetNodeDetailedDesign: 'Детальный проект', fleetNodeCoding: 'Кодирование', fleetNodeUnitTest: 'Модульный тест',
+  fleetNodeIntegrationTest: 'Интеграционный тест', fleetNodeSystemTest: 'Системный тест', fleetStarting: 'Запуск', fleetJustNow: 'только что',
+  fleetAgo: '{duration} назад', fleetMinutes: '{value} мин', fleetHours: '{value} ч', fleetQueuedHint: 'Ждёт свободный слот',
+  fleetOutcomeCompleted: 'Завершена', fleetOutcomeFailed: 'Ошибка', fleetOutcomeCancelled: 'Отменена', fleetWatch: 'Смотреть задачу рядом с разговором',
+  fleetAnswerFailed: 'Ответ не доставлен. {error}', fleetSlots: 'Слоты', fleetTotalTokens: 'Всего {value} токенов',
 }
