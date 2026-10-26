@@ -128,7 +128,6 @@ it('answers decisions for the tab Session and reports each failure as text', asy
   expect(await injected.answer('t1', 'd1', 0)).toBe('already answered')
   b.fleet.answer.mockRejectedValueOnce(new Error('transport closed'))
   expect(await injected.answer('t1', 'd1', 0)).toBe('transport closed')
-  // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- an untyped transport failure is the scenario.
   b.fleet.answer.mockReturnValueOnce(Promise.reject('offline'))
   expect(await injected.answer('t1', 'd1', 0)).toBe('offline')
   expect(injected.hooks.fleet.getSnapshot().capacity).toBeUndefined()
