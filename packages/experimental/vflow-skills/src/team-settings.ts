@@ -2,7 +2,8 @@
  * Team settings document: the company-specific values the vflow workflow reads,
  * kept out of the plugin package and distributed as one JSON file.
  *
- * The document never carries secrets. Connectors name a credential key, and
+ * The document never carries secrets. Each user's account for a connector lives in
+ * the local credential store under `vflow/<connector id>`, and
  * {@link parseTeamSettings} rejects any object key that looks like a secret field.
  *
  * @module
@@ -35,8 +36,6 @@ export interface ConnectorSettings {
   kind: ConnectorKind
   /** Service address on the company network. */
   url: string
-  /** Credential key `<scope>/<id>` that holds this user's account; the value stays in the local credential store. */
-  credential: string
   writePolicy: ConnectorWritePolicy
 }
 
@@ -69,6 +68,7 @@ export interface TeamSettings {
   version: typeof TEAM_SETTINGS_VERSION
   /** Display name of this settings document. */
   name: string
+  /** Connectors keyed by a lowercase id (`^[a-z][a-z0-9-]*$`), which also names the user's credential record. */
   connectors: Record<string, ConnectorSettings>
   projects: ProjectSettings[]
   /** Template for person names in documents; `{englishName}` is replaced per person. */
@@ -91,9 +91,8 @@ export const TeamSettings: Schema<TeamSettings> = z.object({
   connectors: z.dict(z.object({
     kind: z.union(['redmine', 'jira', 'gerrit', 'svn', 'jenkins', 'feishu', 'wiki'] as const).required(),
     url: z.string().min(1).required(),
-    credential: z.string().pattern(/^[^/\s]+\/[^/\s]+$/).required(),
     writePolicy: z.union(['paste-only', 'approve-each', 'read-only'] as const).required(),
-  })).required(),
+  }), identifier).required(),
   projects: z.array(z.object({
     id: identifier.required(),
     displayName: z.string().min(1).required(),

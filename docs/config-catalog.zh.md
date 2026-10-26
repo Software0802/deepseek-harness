@@ -1400,7 +1400,7 @@ export type PaidTranslationProvider = 'deepseek-account' | 'deepseek-official'
 ## `@deepseek-ai/dsh-experimental-vflow-skills`
 
 - `inject`: `skills`
-- `source`: [`packages/experimental/vflow-skills/src/index.ts:30`](../packages/experimental/vflow-skills/src/index.ts)
+- `source`: [`packages/experimental/vflow-skills/src/index.ts:32`](../packages/experimental/vflow-skills/src/index.ts)
 
 ```ts config-catalog
 /** vflow skill pack configuration. */
@@ -1409,6 +1409,8 @@ export interface Config {
   providerName: string
   /** Where the team settings document is published and adopted. */
   teamSettings: TeamSettingsConfig
+  /** Connection test limits for the user's connector accounts. */
+  accounts: AccountsConfig
 }
 
 /** Team settings loader configuration. */
@@ -1419,6 +1421,12 @@ export interface TeamSettingsConfig {
   stateFile: string
   /** Time limit for one fetch of `source`. */
   fetchTimeoutMs: number
+}
+
+/** Account store configuration. */
+export interface AccountsConfig {
+  /** Time limit for one connection test. */
+  probeTimeoutMs: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-experimental-vflow-skills -->

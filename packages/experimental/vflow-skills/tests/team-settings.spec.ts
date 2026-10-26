@@ -15,7 +15,7 @@ function document(overrides: Record<string, unknown> = {}): string {
     version: 1,
     name: 'Example team',
     connectors: {
-      tracker: { kind: 'redmine', url: 'https://tracker.example.test', credential: 'vflow/redmine', writePolicy: 'paste-only' },
+      tracker: { kind: 'redmine', url: 'https://tracker.example.test', writePolicy: 'paste-only' },
     },
     projects: [{ id: 'proj-a', displayName: 'Project A', ticketPrefix: 'ABC', filePrefix: 'PA_' }],
     nameFormat: 'TS {englishName}',
@@ -52,7 +52,7 @@ describe('parseTeamSettings', () => {
   })
 
   it('refuses secret-like keys and names where they are', () => {
-    const nested = refusal(document({ connectors: { tracker: { kind: 'jira', url: 'u', credential: 'a/b', writePolicy: 'read-only', password: 'x' } } }))
+    const nested = refusal(document({ connectors: { tracker: { kind: 'jira', url: 'u', writePolicy: 'read-only', password: 'x' } } }))
     expect(nested.code).toBe('secret-field')
     expect(nested.path).toBe('$.connectors.tracker.password')
     const inArray = refusal(document({ projects: [{ id: 'p', apiToken: 'x' }] }))
@@ -62,6 +62,7 @@ describe('parseTeamSettings', () => {
   it('refuses documents that fail the schema', () => {
     expect(refusal(document({ nameFormat: 'TS' })).code).toBe('invalid-settings')
     expect(refusal(document({ version: 2 })).code).toBe('invalid-settings')
+    expect(refusal(document({ connectors: { Tracker: { kind: 'jira', url: 'u', writePolicy: 'read-only' } } })).code).toBe('invalid-settings')
   })
 
   it('refuses a default reviewer that names no executor', () => {
@@ -83,7 +84,10 @@ describe('TeamSettingsService', () => {
   afterEach(async () => {
     await context?.fiber.dispose()
     context = undefined
-    await new Promise(resolve => server === undefined ? resolve(undefined) : server.close(resolve))
+    await new Promise<void>((resolve) => {
+      if (server === undefined) resolve()
+      else server.close(() => { resolve() })
+    })
     server = undefined
     await rm(dir, { recursive: true, force: true })
   })

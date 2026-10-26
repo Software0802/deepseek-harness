@@ -20,7 +20,7 @@ async function setup(providerName = 'vflow'): Promise<Context> {
   home = await mkdtemp(join(tmpdir(), 'vflow-skills-'))
   context = new Context()
   await context.plugin(SkillRegistry)
-  await context.plugin(VflowSkills, { providerName, teamSettings: { source: '', fetchTimeoutMs: 10_000, stateFile: join(home, 'team-settings.json') } })
+  await context.plugin(VflowSkills, { providerName, teamSettings: { source: '', fetchTimeoutMs: 10_000, stateFile: join(home, 'team-settings.json') }, accounts: { probeTimeoutMs: 10_000 } })
   return context
 }
 
