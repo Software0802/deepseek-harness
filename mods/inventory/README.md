@@ -47,3 +47,13 @@
 `plugins.json` 的 `localTools` 段记录**非 DSH 插件**的本地工具——它们是独立 CLI / 库，不装入桌面客户端 profile，但属于本仓库维护的工具链。
 
 - `backpass` — `mods/features/backpass/`，kunchenguid/backpass 的 fork（含 DSH adapter）。安装/使用见 `mods/features/backpass/README.dsh.md`。
+
+## 环境依赖（environment）
+
+`plugins.json` 的 `environment` 段记录本机可复现的工具链状态，换 PC 时按它逐项对照：
+
+- **node**：本机 homebrew node@22 已坏（缺 simdjson 动态库），**一律用 DSH 自带 node**（`~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin`，v24.x）。npm 用 `node <homebrew npm-cli.js 路径>` 驱动，或直接用 bundled pnpm。
+- **agent CLIs**：claude/codex/opencode/grok/cursor-agent/hermes 的位置与登录状态。backpass 的分析/综合模型调用经 `acpx` 走其中一个已登录 harness。
+- **backpassDeps**：`acpx`（必需）、`lavish-axi`（apply 的浏览器 review UI）。
+
+新 PC 建环境时逐项核对 `environment` 段，缺的按它写的装。

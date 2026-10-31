@@ -163,6 +163,27 @@
   "config": {
     "patch": "profile.patch.yml"
   },
+  "environment": {
+    "system": {
+      "node": "homebrew node@22 (broken: missing simdjson lib) — use DSH bundled node instead",
+      "bundledNode": "~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node (v24.21.0)",
+      "bundledPnpm": "~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/pnpm/bin/pnpm.mjs",
+      "bundledNpm": "node /opt/homebrew/Cellar/node@22/*/lib/node_modules/npm/bin/npm-cli.js (with bundled node on PATH first)",
+      "zstd": "brew install zstd"
+    },
+    "agentCLIs": {
+      "claude": "~/.local/bin/claude (logged in)",
+      "codex": "/opt/homebrew/bin/codex (not logged in)",
+      "opencode": "/opt/homebrew/bin/opencode",
+      "grok": "~/.grok/bin/grok",
+      "cursor-agent": "~/.local/bin/cursor-agent",
+      "hermes": "~/.local/bin/hermes"
+    },
+    "backpassDeps": {
+      "acpx": "npm i -g acpx (or .tools/node_modules/.bin/acpx)",
+      "lavish-axi": "npm i -g lavish-axi (or .tools/node_modules/.bin/lavish-axi) — apply review UI"
+    }
+  },
   "localTools": [
     {
       "id": "backpass",
@@ -172,7 +193,8 @@
       "purpose": "AGENTS.md 反向传播训练：读本地 agent 会话 transcript，提议证据化编辑。含本仓库维护的 DSH adapter",
       "license": "MIT",
       "install": "cd mods/features/backpass && pnpm install && node bin/backpass.js",
-      "requires": ["node>=22.5", "zstd", "acpx", "lavish-axi(可选, apply review UI)"]
+      "requires": ["node>=22.5", "zstd", "acpx", "lavish-axi(可选, apply review UI)"],
+      "skill": "mods/skills/backpass-weekly — 每周反向传播流程封装"
     }
   ]
 }
