@@ -1,27 +1,30 @@
 #!/usr/bin/env node
 /**
- * 新 PC 环境自检 —— 对照 mods/inventory/plugins.json 的 environment 段逐项检查。
- * 输出 ✓/✗ 清单和每项的补救命令；任何 ✗ 表示 setup 未完成。
+ * 新 PC 环境自检 —— 完全由 mods/inventory/plugins.json 的 environment.checks 驱动。
+ * 加新工具/依赖只需往 checks 数组 push 一条 spec，不用改这个脚本。
+ *
+ * 支持的 kind：
+ *   command        { command: "<sh>", versionGte?: "x.y" }   命令能跑通（可选版本比较）
+ *   commandOrLocal { command: "<sh>", localPath: "<rel>" }    PATH 或仓库相对路径存在
+ *   path           { path: "<abs|~|repo-rel>" }               路径存在
+ *   aggregate      { anyOf: ["check-id", ...] }               任一 referenced check 过
+ *
+ * 每条 check 字段：id、name、kind、remedy（失败时的补救命令提示）。
  * 用法：node mods/setup/check-env.mjs [--verbose]
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
 const here = dirname(new URL(import.meta.url).pathname);
-const root = join(here, "..", "..");
+const root = join(here, "..", ".."); // deepseek-harness/
 const inventory = JSON.parse(readFileSync(join(root, "mods/inventory/plugins.json"), "utf8"));
-const env = inventory.environment ?? {};
-const verbose = process.argv.includes("--verbose");
+const specs = inventory.environment?.checks ?? [];
 
-const results = [];
-function check(name, ok, detail, remedy) {
-  results.push({ name, ok, detail, remedy });
-}
-function sh(cmd, args, opts = {}) {
+function sh(cmd, args = []) {
   try {
-    return execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...opts }).trim();
+    return execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   } catch {
     return null;
   }
@@ -29,76 +32,91 @@ function sh(cmd, args, opts = {}) {
 function which(bin) {
   return sh("which", [bin]);
 }
-function version(bin, flag = "--version") {
-  const p = which(bin);
-  if (!p) return null;
-  const out = sh(p, [flag]);
-  return out ? { path: p, version: out.split("\n")[0] } : null;
+function expandPath(p) {
+  if (!p) return p;
+  if (p.startsWith("~/") || p === "~") return join(homedir(), p.slice(1));
+  if (isAbsolute(p)) return p;
+  return join(root, p);
+}
+function parseVer(v) {
+  return String(v ?? "").replace(/^v/, "").split(/[^\d.]/)[0];
+}
+function gte(a, b) {
+  const pa = parseVer(a).split(".").map(Number);
+  const pb = parseVer(b).split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] || 0,
+      y = pb[i] || 0;
+    if (x !== y) return x > y;
+  }
+  return true;
 }
 
-const bundledNode = join(homedir(), ".dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node");
-const node = existsSync(bundledNode) ? { path: bundledNode, version: sh(bundledNode, ["--version"]) } : version("node");
-check(
-  "node >= 22.5",
-  !!node && parseInt(node.version.replace("v", "")) >= 22,
-  node ? `${node.version} @ ${node.path}` : "not found",
-  `use DSH bundled node: export PATH="${join(homedir(), ".dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin")}:$PATH"`,
-);
-
-const zstd = version("zstd");
-check("zstd", !!zstd, zstd?.version ?? "not found", "brew install zstd");
-
-const appDir = "/Applications/DeepSeek Harness.app";
-check("DeepSeek Harness.app", existsSync(appDir), existsSync(appDir) ? appDir : "missing", "install desktop app to /Applications");
-
-const profileDir = join(homedir(), ".dsh/profiles/desktop");
-const profilePkg = join(profileDir, "package.json");
-check(
-  "desktop profile initialized",
-  existsSync(profilePkg),
-  existsSync(profilePkg) ? profileDir : "missing — launch app once then quit",
-  "open DeepSeek Harness.app once, then Cmd+Q",
-);
-
-function findTool(name) {
-  // Check global PATH, then the workspace-level .tools install (sibling of deepseek-harness).
-  const localBin = join(root, "..", ".tools", "node_modules", ".bin", name);
-  return version(name) ?? (existsSync(localBin) ? { version: `local .tools` } : null);
+function run(spec) {
+  switch (spec.kind) {
+    case "command": {
+      // Prefer a specific binary (e.g. bundled node) when declared.
+      const candidates = spec.prefer ? [expandPath(spec.prefer), ...spec.command.split(" ")[0].split(",")] : spec.command.split(" ")[0].split(",");
+      let out = null,
+        bin = null;
+      for (const c of candidates) {
+        const cmdBin = c.includes(" ") ? c.split(" ")[0] : c;
+        const resolved = existsSync(expandPath(cmdBin)) ? expandPath(cmdBin) : which(cmdBin);
+        if (!resolved) continue;
+        const args = spec.command.includes(" ") ? spec.command.split(" ").slice(1) : ["--version"];
+        out = sh(resolved, args);
+        if (out !== null) {
+          bin = resolved;
+          break;
+        }
+      }
+      if (out === null) return { ok: false, detail: "not found" };
+      const firstLine = out.split("\n")[0];
+      // `which <name>` results are already absolute paths; don't append "@ which".
+      const where = firstLine.startsWith("/") ? "" : ` @ ${bin}`;
+      if (spec.versionGte && !gte(firstLine, spec.versionGte)) {
+        return { ok: false, detail: `${firstLine} @ ${bin} (needs >= ${spec.versionGte})` };
+      }
+      return { ok: true, detail: `${firstLine}${where}` };
+    }
+    case "commandOrLocal": {
+      const name = spec.command.split(" ")[0];
+      if (which(name)) return { ok: true, detail: which(name) };
+      const local = expandPath(spec.localPath);
+      if (existsSync(local)) return { ok: true, detail: `${local} (local)` };
+      return { ok: false, detail: "not found" };
+    }
+    case "path": {
+      const p = expandPath(spec.path);
+      return existsSync(p) ? { ok: true, detail: p } : { ok: false, detail: `missing: ${p}` };
+    }
+    case "aggregate":
+      return { ok: null, detail: "" }; // resolved after all others
+    default:
+      return { ok: false, detail: `unknown kind "${spec.kind}"` };
+  }
 }
-const acpx = findTool("acpx");
-check("acpx", !!acpx, acpx?.version ?? "not found", "npm i -g acpx  OR  cd ../.tools && npm i acpx");
-const lavish = findTool("lavish-axi");
-check("lavish-axi (apply UI)", !!lavish, lavish?.version ?? "not found", "npm i -g lavish-axi  OR  cd ../.tools && npm i lavish-axi");
 
-const agentCLIs = env.agentCLIs ?? {};
-let anyLoggedIn = false;
-for (const [name, expectedPath] of Object.entries(agentCLIs)) {
-  const found = which(name);
-  const note = expectedPath.includes("logged in") ? " (expected logged in)" : "";
-  if (found) anyLoggedIn = anyLoggedIn || expectedPath.includes("logged in");
-  check(`cli: ${name}`, !!found, found ?? `not found${note}`, expectedPath.startsWith("/") ? `install ${name}` : `install & login ${name}`);
+const results = new Map();
+for (const spec of specs) {
+  if (spec.kind === "aggregate") continue;
+  const r = run(spec);
+  results.set(spec.id, { spec, ...r });
 }
-check("≥1 agent harness logged in", anyLoggedIn, anyLoggedIn ? "" : "none logged in", "login one of: claude / codex / opencode / grok / cursor-agent / hermes");
+// Aggregates depend on earlier results.
+for (const spec of specs) {
+  if (spec.kind !== "aggregate") continue;
+  const hit = spec.anyOf.find((id) => results.get(id)?.ok);
+  results.set(spec.id, { spec, ok: !!hit, detail: hit ? `via ${hit}` : "none passed" });
+}
 
-const backpassBin = join(root, "mods/features/backpass/bin/backpass.js");
-check("backpass fork", existsSync(backpassBin), backpassBin, "clone deepseek-harness mods/features/backpass");
-
-const backpassDeps = join(root, "mods/features/backpass/node_modules");
-check("backpass deps installed", existsSync(backpassDeps), existsSync(backpassDeps) ? "ok" : "run pnpm install in mods/features/backpass", "cd mods/features/backpass && pnpm install");
-
-const skillFile = join(root, "mods/skills/backpass-weekly/SKILL.md");
-check("backpass-weekly skill", existsSync(skillFile), skillFile, "present in mods/skills");
-
-const syncScript = join(root, "mods/inventory/sync.mjs");
-check("inventory sync.mjs", existsSync(syncScript), syncScript, "present");
-
-const w = results.reduce((m, r) => Math.max(m, r.name.length), 0);
+const w = [...results.values()].reduce((m, r) => Math.max(m, r.spec.name.length), 0);
 let fail = 0;
-for (const r of results) {
-  const mark = r.ok ? "✓" : "✗";
-  if (!r.ok) fail++;
-  console.log(`${mark} ${r.name.padEnd(w)}  ${r.detail}`);
-  if (!r.ok && r.remedy) console.log(`    → ${r.remedy}`);
+for (const { spec, ok, detail } of results.values()) {
+  const mark = ok ? "✓" : "✗";
+  if (!ok) fail++;
+  console.log(`${mark} ${spec.name.padEnd(w)}  ${detail}`);
+  if (!ok && spec.remedy) console.log(`    → ${spec.remedy}`);
 }
-console.log(`\n${results.length - fail}/${results.length} passed${fail ? ` — ${fail} to fix` : " — setup complete"}`);
+console.log(`\n${results.size - fail}/${results.size} passed${fail ? ` — ${fail} to fix` : " — setup complete"}`);
 process.exit(fail ? 1 : 0);

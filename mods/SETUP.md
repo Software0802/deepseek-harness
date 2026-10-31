@@ -70,6 +70,15 @@ cd mods/features/backpass && pnpm run check   # backpass 自身测试（1031 应
 
 `check-env.mjs` 输出每一项 ✓/✗；任何 ✗ 都是 setup 未完成。
 
+### 扩展这个清单
+
+这个 checklist 是**声明式驱动**的——`mods/inventory/plugins.json` 的 `environment.checks` 数组。以后加新工具/依赖：
+
+1. 往 `checks` 数组 push 一条 spec（kind: `command`/`commandOrLocal`/`path`/`aggregate`），写好 `remedy`。
+2. `check-env.mjs` 自动执行，无需改脚本。
+
+schema 见 `mods/inventory/README.md` 的"环境依赖"节。
+
 ## Step 5 — 让 backpass 开始干活
 
 在某个要用 AGENTS.md 的 repo 里：

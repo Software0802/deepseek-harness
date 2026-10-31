@@ -42,21 +42,7 @@
       "source": "npm",
       "enabled": true,
       "category": "features",
-      "purpose": "把飞书/微信/企微/钉钉/QQ/Slack/Telegram/Discord/WhatsApp/Matrix 等 IM 机器人接入 DSH",
-      "license": "MIT",
-      "client": {
-        "hasClient": true,
-        "requireAsset": 0
-      }
-    },
-    {
-      "id": "dsh-plugins-store",
-      "version": "0.1.4",
-      "install": "dsh-plugins-store@0.1.4",
-      "source": "npm",
-      "enabled": true,
-      "category": "features",
-      "purpose": "DSH 插件商店（浏览/安装第三方插件）",
+      "purpose": "IM 机器人接入（飞书/微信/企微/钉钉/QQ/Slack/Telegram/Discord/WhatsApp/Matrix）",
       "license": "MIT",
       "client": {
         "hasClient": true,
@@ -70,7 +56,21 @@
       "source": "npm",
       "enabled": true,
       "category": "features",
-      "purpose": "手机或另一台电脑远程使用 DSH（配对网关、PWA、Web Push、远程会话）",
+      "purpose": "手机/另一台电脑远程使用 DSH（网关 + PWA + Web Push + 远程会话）",
+      "license": "MIT",
+      "client": {
+        "hasClient": true,
+        "requireAsset": 0
+      }
+    },
+    {
+      "id": "dsh-plugins-store",
+      "version": "0.1.4",
+      "install": "dsh-plugins-store@0.1.4",
+      "source": "npm",
+      "enabled": true,
+      "category": "features",
+      "purpose": "DSH 插件商店",
       "license": "MIT",
       "client": {
         "hasClient": true,
@@ -80,11 +80,11 @@
     {
       "id": "@nonamelego/dsh-catppuccin",
       "version": "0.6.4",
-      "install": "@nonamelego/dsh-catppuccin@^0.6.4",
+      "install": "@nonamelego/dsh-catppuccin@0.6.4",
       "source": "npm",
       "enabled": true,
       "category": "ui",
-      "purpose": "Catppuccin 四套配色（Latte/Frappé/Macchiato/Mocha）+ 玻璃质感",
+      "purpose": "Catppuccin 主题（当前 Frappé + 玻璃质感）",
       "license": "MIT",
       "client": {
         "hasClient": true,
@@ -94,12 +94,12 @@
     {
       "id": "@smalltailqwq/dsh-client-ui-skin-maid-atelier",
       "version": "0.1.9",
-      "install": "@smalltailqwq/dsh-client-ui-skin-maid-atelier@^0.1.9",
+      "install": "@smalltailqwq/dsh-client-ui-skin-maid-atelier@0.1.9",
       "source": "npm",
       "enabled": true,
       "category": "ui",
-      "purpose": "鲸鱼娘皮肤 · 深海女仆工坊（当前被皮肤管理器禁用状态托管）",
-      "license": "SEE LICENSE IN LICENSE",
+      "purpose": "鲸鱼娘皮肤（当前被托管禁用）",
+      "license": "MIT",
       "client": {
         "hasClient": true,
         "requireAsset": 0
@@ -108,12 +108,12 @@
     {
       "id": "@smalltailqwq/dsh-client-ui-skin-orca-link",
       "version": "0.1.9",
-      "install": "@smalltailqwq/dsh-client-ui-skin-orca-link@^0.1.9",
+      "install": "@smalltailqwq/dsh-client-ui-skin-orca-link@0.1.9",
       "source": "npm",
       "enabled": true,
       "category": "ui",
-      "purpose": "鲸鱼娘皮肤 · 虎鲸链路（当前被皮肤管理器禁用状态托管）",
-      "license": "SEE LICENSE IN LICENSE",
+      "purpose": "鲸鱼娘皮肤（当前被托管禁用）",
+      "license": "MIT",
       "client": {
         "hasClient": true,
         "requireAsset": 0
@@ -134,9 +134,9 @@
     "@deepseek-ai/dsh-experimental-badge-skill-bundle",
     "@deepseek-ai/dsh-experimental-ralph-bundle",
     "@deepseek-ai/dsh-experimental-plugin-market-bundle",
+    "@deepseek-ai/dsh-experimental-cot-translation-bundle",
     "dsh-plugins-store",
     "@local/agent-hub",
-    "@deepseek-ai/dsh-experimental-cot-translation-bundle",
     "@nonamelego/dsh-catppuccin",
     "@smalltailqwq/dsh-client-ui-skin-maid-atelier",
     "@smalltailqwq/dsh-client-ui-skin-orca-link",
@@ -164,25 +164,137 @@
     "patch": "profile.patch.yml"
   },
   "environment": {
-    "system": {
-      "node": "homebrew node@22 (broken: missing simdjson lib) — use DSH bundled node instead",
-      "bundledNode": "~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node (v24.21.0)",
-      "bundledPnpm": "~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/pnpm/bin/pnpm.mjs",
-      "bundledNpm": "node /opt/homebrew/Cellar/node@22/*/lib/node_modules/npm/bin/npm-cli.js (with bundled node on PATH first)",
-      "zstd": "brew install zstd"
+    "notes": {
+      "node": "homebrew node@22 broken (missing simdjson lib) — use DSH bundled node",
+      "bundledNode": "~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node",
+      "bundledPnpm": "~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/pnpm/bin/pnpm.mjs"
     },
-    "agentCLIs": {
-      "claude": "~/.local/bin/claude (logged in)",
-      "codex": "/opt/homebrew/bin/codex (not logged in)",
-      "opencode": "/opt/homebrew/bin/opencode",
-      "grok": "~/.grok/bin/grok",
-      "cursor-agent": "~/.local/bin/cursor-agent",
-      "hermes": "~/.local/bin/hermes"
-    },
-    "backpassDeps": {
-      "acpx": "npm i -g acpx (or .tools/node_modules/.bin/acpx)",
-      "lavish-axi": "npm i -g lavish-axi (or .tools/node_modules/.bin/lavish-axi) — apply review UI"
-    }
+    "checks": [
+      {
+        "id": "node",
+        "name": "node >= 22.5",
+        "kind": "command",
+        "command": "node --version",
+        "prefer": "~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node",
+        "versionGte": "22.5",
+        "remedy": "use DSH bundled node: export PATH=\"$HOME/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin:$PATH\""
+      },
+      {
+        "id": "zstd",
+        "name": "zstd",
+        "kind": "command",
+        "command": "zstd --version",
+        "remedy": "brew install zstd"
+      },
+      {
+        "id": "dsh-app",
+        "name": "DeepSeek Harness.app",
+        "kind": "path",
+        "path": "/Applications/DeepSeek Harness.app",
+        "remedy": "install desktop app to /Applications"
+      },
+      {
+        "id": "dsh-profile",
+        "name": "desktop profile initialized",
+        "kind": "path",
+        "path": "~/.dsh/profiles/desktop/package.json",
+        "remedy": "open DeepSeek Harness.app once, then Cmd+Q"
+      },
+      {
+        "id": "acpx",
+        "name": "acpx",
+        "kind": "commandOrLocal",
+        "command": "acpx --version",
+        "localPath": "../.tools/node_modules/.bin/acpx",
+        "remedy": "npm i -g acpx  OR  cd ../.tools && npm i acpx"
+      },
+      {
+        "id": "lavish-axi",
+        "name": "lavish-axi (apply UI)",
+        "kind": "commandOrLocal",
+        "command": "lavish-axi --version",
+        "localPath": "../.tools/node_modules/.bin/lavish-axi",
+        "remedy": "npm i -g lavish-axi  OR  cd ../.tools && npm i lavish-axi"
+      },
+      {
+        "id": "cli-claude",
+        "name": "cli: claude",
+        "kind": "command",
+        "command": "which claude",
+        "loggedIn": true,
+        "remedy": "install claude"
+      },
+      {
+        "id": "cli-codex",
+        "name": "cli: codex",
+        "kind": "command",
+        "command": "which codex",
+        "remedy": "install codex"
+      },
+      {
+        "id": "cli-opencode",
+        "name": "cli: opencode",
+        "kind": "command",
+        "command": "which opencode",
+        "remedy": "install opencode"
+      },
+      {
+        "id": "cli-grok",
+        "name": "cli: grok",
+        "kind": "command",
+        "command": "which grok",
+        "remedy": "install grok"
+      },
+      {
+        "id": "cli-cursor-agent",
+        "name": "cli: cursor-agent",
+        "kind": "command",
+        "command": "which cursor-agent",
+        "remedy": "install cursor-agent"
+      },
+      {
+        "id": "cli-hermes",
+        "name": "cli: hermes",
+        "kind": "command",
+        "command": "which hermes",
+        "remedy": "install hermes"
+      },
+      {
+        "id": "agent-logged-in",
+        "name": "≥1 agent harness logged in",
+        "kind": "aggregate",
+        "anyOf": ["cli-claude", "cli-codex", "cli-opencode", "cli-grok", "cli-cursor-agent", "cli-hermes"],
+        "remedy": "login one of: claude / codex / opencode / grok / cursor-agent / hermes"
+      },
+      {
+        "id": "backpass-fork",
+        "name": "backpass fork",
+        "kind": "path",
+        "path": "mods/features/backpass/bin/backpass.js",
+        "remedy": "clone deepseek-harness mods/features/backpass"
+      },
+      {
+        "id": "backpass-deps",
+        "name": "backpass deps installed",
+        "kind": "path",
+        "path": "mods/features/backpass/node_modules",
+        "remedy": "cd mods/features/backpass && pnpm install"
+      },
+      {
+        "id": "skill-backpass-weekly",
+        "name": "backpass-weekly skill",
+        "kind": "path",
+        "path": "mods/skills/backpass-weekly/SKILL.md",
+        "remedy": "present in mods/skills"
+      },
+      {
+        "id": "sync-script",
+        "name": "inventory sync.mjs",
+        "kind": "path",
+        "path": "mods/inventory/sync.mjs",
+        "remedy": "present"
+      }
+    ]
   },
   "localTools": [
     {

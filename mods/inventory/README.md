@@ -50,10 +50,30 @@
 
 ## 环境依赖（environment）
 
-`plugins.json` 的 `environment` 段记录本机可复现的工具链状态，换 PC 时按它逐项对照：
+`plugins.json` 的 `environment` 段是新 PC 的可执行清单。它分两块：
 
-- **node**：本机 homebrew node@22 已坏（缺 simdjson 动态库），**一律用 DSH 自带 node**（`~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin`，v24.x）。npm 用 `node <homebrew npm-cli.js 路径>` 驱动，或直接用 bundled pnpm。
-- **agent CLIs**：claude/codex/opencode/grok/cursor-agent/hermes 的位置与登录状态。backpass 的分析/综合模型调用经 `acpx` 走其中一个已登录 harness。
-- **backpassDeps**：`acpx`（必需）、`lavish-axi`（apply 的浏览器 review UI）。
+- **`notes`** — 自由文本的机器事实（比如"homebrew node 坏了，用 DSH bundled node"）
+- **`checks`** — 声明式检查项数组，`mods/setup/check-env.mjs` 逐条执行
 
-新 PC 建环境时逐项核对 `environment` 段，缺的按它写的装。
+### 加一个新的环境依赖
+
+往 `environment.checks` push 一条 spec 即可，不用改 `check-env.mjs`：
+
+```jsonc
+{
+  "id": "my-tool",                    // 唯一 id，aggregate 的 anyOf 引用它
+  "name": "my-tool",                  // 显示名
+  "kind": "command",                  // command | commandOrLocal | path | aggregate
+  "command": "my-tool --version",     // 要跑的命令
+  "versionGte": "1.2",                // 可选：最低版本
+  "remedy": "brew install my-tool"    // 失败时打印的补救命令
+}
+```
+
+kind 一览：
+- `command` — 命令能跑通；`prefer` 可指定优先二进制路径
+- `commandOrLocal` — PATH 有，或仓库相对路径（`localPath`）存在
+- `path` — 文件/目录存在（支持 `~`、绝对、仓库相对）
+- `aggregate` — `{ "anyOf": ["other-check-id", ...] }` 任一过即过（用于"至少一个 CLI 登录"这类）
+
+`check-env.mjs` 按数组顺序执行，`aggregate` 永远最后算。
