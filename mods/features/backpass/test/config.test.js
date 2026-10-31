@@ -1,0 +1,375 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import {
+  CONFIG_FILENAME,
+  initialUserConfig,
+  loadConfig,
+  parseScopeKind,
+  parseSince,
+  sinceCutoff,
+} from "../src/config.js";
+import { evidenceKey, isEvidenceFresh, safeFileName, State } from "../src/state.js";
+import { UserError } from "../src/logger.js";
+
+function tempRepo(config) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "backpass-config-"));
+  if (config !== undefined) {
+    fs.writeFileSync(path.join(dir, CONFIG_FILENAME), typeof config === "string" ? config : JSON.stringify(config));
+  }
+  return dir;
+}
+
+test("the defaults match the approved design", () => {
+  const config = loadConfig(tempRepo());
+  assert.equal(config.budgetTokens, 5000);
+  assert.equal(config.maxEditsPerRun, null, "the edit cap is adaptive unless pinned");
+  assert.equal(config.minGapEvidence, 2);
+  assert.equal(config.jobs, 4);
+  assert.equal(config.discovery.since, "30d");
+  assert.deepEqual(config.discovery.harnesses, [
+    "claude",
+    "codex",
+    "pi",
+    "opencode",
+    "grok",
+    "cursor",
+    "hermes",
+    "dsh",
+  ]);
+  assert.ok(!config.discovery.harnesses.includes("cursor-ide"), "Cursor IDE is deferred to v1.1");
+  assert.deepEqual(config.analysis, { agent: null, model: null, effort: null }, "agents are auto-picked by default");
+  assert.deepEqual(config.synthesis, { agent: null, model: null, effort: null });
+  assert.equal(config.autoAgent, true);
+  assert.deepEqual(
+    config.ladders.analysis.map((r) => r.model),
+    ["gpt-5.6-luna", "claude-sonnet-5", "grok-4.6"],
+  );
+  assert.deepEqual(
+    config.ladders.synthesis.map((r) => r.model),
+    ["gpt-5.6-sol", "claude-opus-5", "grok-4.6"],
+  );
+});
+
+test("a model without an agent is rejected rather than half-auto-picked", () => {
+  assert.throws(() => loadConfig(tempRepo({ synthesis: { model: "claude-opus-5" } })), UserError);
+  const ok = loadConfig(tempRepo({ synthesis: { agent: "claude", model: "claude-opus-5" } }));
+  assert.equal(ok.synthesis.agent, "claude");
+});
+
+test("ladders are user-editable and validated", () => {
+  const config = loadConfig(tempRepo({ ladders: { analysis: [{ model: "gpt-5.5", agents: ["codex"] }] } }));
+  assert.deepEqual(config.ladders.analysis, [{ model: "gpt-5.5", agents: ["codex"] }]);
+  assert.equal(config.ladders.synthesis.length, 3, "the other role keeps its default ladder");
+  assert.throws(() => loadConfig(tempRepo({ ladders: { analysis: [] } })), UserError);
+  assert.throws(() => loadConfig(tempRepo({ ladders: { synthesis: [{ model: "x" }] } })), UserError);
+});
+
+test("repo config overrides defaults, and CLI flags override both", () => {
+  const dir = tempRepo({ budgetTokens: 3000, analysis: { agent: "pi" } });
+
+  const fromFile = loadConfig(dir);
+  assert.equal(fromFile.budgetTokens, 3000);
+  assert.equal(fromFile.analysis.agent, "pi");
+  assert.equal(fromFile.synthesis.agent, null, "untouched defaults survive a partial override (null = auto-pick)");
+
+  const withFlags = loadConfig(dir, { budgetTokens: 8000, analysis: { model: "gpt-5.2" } });
+  assert.equal(withFlags.budgetTokens, 8000);
+  assert.equal(withFlags.analysis.agent, "pi", "a nested flag override merges, it does not replace");
+  assert.equal(withFlags.analysis.model, "gpt-5.2");
+});
+
+test("repo null explicitly overrides a global agent pin with auto-pick", () => {
+  const configHome = fs.mkdtempSync(path.join(os.tmpdir(), "backpass-config-global-pin-"));
+  const repo = tempRepo({ analysis: { agent: null, model: null, effort: null } });
+  const previous = process.env.XDG_CONFIG_HOME;
+  process.env.XDG_CONFIG_HOME = configHome;
+  fs.mkdirSync(path.join(configHome, "backpass"), { recursive: true });
+  fs.writeFileSync(
+    path.join(configHome, "backpass", "config.json"),
+    JSON.stringify({ analysis: { agent: "claude", model: "claude-sonnet-5", effort: "medium" } }),
+  );
+
+  try {
+    assert.deepEqual(loadConfig(repo).analysis, { agent: null, model: null, effort: null });
+  } finally {
+    if (previous === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = previous;
+  }
+});
+
+test("skillsDir is normalized when the configuration loads", () => {
+  const config = loadConfig(tempRepo({ skillsDir: ".claude\\skills\\" }));
+  assert.equal(config.skillsDir, ".claude/skills");
+});
+
+test("skillsDir rejects malformed configuration values", () => {
+  for (const skillsDir of [null, "", "/", 42, {}]) {
+    assert.throws(() => loadConfig(tempRepo({ skillsDir })), UserError);
+  }
+});
+
+test("skillSearchPaths defaults to none and rejects non-array-of-strings values", () => {
+  assert.deepEqual(loadConfig(tempRepo()).skillSearchPaths, []);
+  for (const skillSearchPaths of ["~/.claude/skills", 42, [1], [{}], {}]) {
+    assert.throws(() => loadConfig(tempRepo({ skillSearchPaths })), UserError);
+  }
+});
+
+test("skillSearchPaths rejects degenerate roots: the empty string and the filesystem root", () => {
+  // An empty root, or the filesystem root, would mark everything read-only / nothing
+  // stageable - reject them loudly at config validation rather than enforcing them.
+  for (const bad of ["", "   ", "/", "//", "\\", "C:\\", "C:/", "C:"]) {
+    assert.throws(() => loadConfig(tempRepo({ skillSearchPaths: ["~/.claude/skills", bad] })), UserError);
+  }
+  // A specific directory under the root is fine.
+  assert.deepEqual(loadConfig(tempRepo({ skillSearchPaths: ["/srv/shared-skills"] })).skillSearchPaths, [
+    "/srv/shared-skills",
+  ]);
+});
+
+test("skillSearchPaths rejects a root that is the repo root, or an ancestor of it", () => {
+  // e.g. skillSearchPaths: ["~"] with the repo checked out under $HOME must never
+  // silently disable writes to the repo's own configured skills directory.
+  const parent = tempRepo();
+  const nested = path.join(parent, "nested-repo");
+  fs.mkdirSync(nested);
+
+  fs.writeFileSync(path.join(nested, CONFIG_FILENAME), JSON.stringify({ skillSearchPaths: [parent] }));
+  assert.throws(() => loadConfig(nested), UserError, "an ancestor of the repo root is rejected");
+
+  fs.writeFileSync(path.join(nested, CONFIG_FILENAME), JSON.stringify({ skillSearchPaths: [nested] }));
+  assert.throws(() => loadConfig(nested), UserError, "the repo root itself is rejected");
+
+  // A directory nested INSIDE the repo is a different shape and stays accepted.
+  fs.writeFileSync(
+    path.join(nested, CONFIG_FILENAME),
+    JSON.stringify({ skillSearchPaths: [path.join(nested, "vendor")] }),
+  );
+  assert.deepEqual(loadConfig(nested).skillSearchPaths, [path.join(nested, "vendor")]);
+});
+
+test("skillSearchPaths rejects a root that equals or contains the repo's own skillsDir", () => {
+  // skillsDir defaults to ".agents/skills". A search path of ".agents" contains it, and
+  // ".agents/skills" itself equals it - both would mark the repo's own write target
+  // read-only if they were not rejected the same way the repo-ancestor case already is.
+  const containing = tempRepo();
+  fs.writeFileSync(path.join(containing, CONFIG_FILENAME), JSON.stringify({ skillSearchPaths: [".agents"] }));
+  assert.throws(() => loadConfig(containing), UserError, "a root containing skillsDir is rejected");
+
+  const equal = tempRepo();
+  fs.writeFileSync(path.join(equal, CONFIG_FILENAME), JSON.stringify({ skillSearchPaths: [".agents/skills"] }));
+  assert.throws(() => loadConfig(equal), UserError, "a root equal to skillsDir is rejected");
+
+  // A sibling directory that does not overlap skillsDir stays accepted.
+  const sibling = tempRepo();
+  fs.writeFileSync(path.join(sibling, CONFIG_FILENAME), JSON.stringify({ skillSearchPaths: ["shared"] }));
+  assert.deepEqual(loadConfig(sibling).skillSearchPaths, ["shared"]);
+});
+
+test("skillSearchPaths expands ~ and feeds the read-only awareness list without touching skillsDir", () => {
+  const home = os.homedir();
+  const config = loadConfig(tempRepo({ skillSearchPaths: ["~/.hermes/skills-shared", "~/.claude/skills"] }));
+  // The write target is untouched; the search paths join the awareness roots, ~ expanded.
+  assert.equal(config.skillsDir, ".agents/skills");
+  assert.deepEqual(config.skillSearchPaths, ["~/.hermes/skills-shared", "~/.claude/skills"]);
+  assert.deepEqual(config.skillsDirs, [
+    path.join(home, ".hermes", "skills-shared"),
+    path.join(home, ".claude", "skills"),
+  ]);
+});
+
+test("--include-cursor-ide is the only way the deferred store is scanned", () => {
+  const config = loadConfig(tempRepo(), { discovery: { includeCursorIde: true } });
+  assert.ok(config.discovery.harnesses.includes("cursor-ide"));
+});
+
+test("OMP discovery rejects non-boolean opt-ins rather than treating them as enabled", () => {
+  for (const includeOmp of ["true", 1, null, []]) {
+    assert.throws(
+      () => loadConfig(tempRepo({ discovery: { includeOmp } })),
+      /config\.discovery\.includeOmp must be a boolean/,
+    );
+  }
+});
+
+test("unknown harness names are dropped rather than failing the run", () => {
+  const config = loadConfig(tempRepo({ discovery: { harnesses: ["claude", "not-a-harness"] } }));
+  assert.deepEqual(config.discovery.harnesses, ["claude"]);
+});
+
+test("invalid config values fail loudly with a usable message", () => {
+  assert.throws(() => loadConfig(tempRepo({ budgetTokens: 0 })), UserError);
+  assert.throws(() => loadConfig(tempRepo({ memoryFiles: [] })), UserError);
+  assert.throws(() => loadConfig(tempRepo({ minGapEvidence: 0 })), UserError);
+  assert.throws(() => loadConfig(tempRepo({ discovery: { since: "yesterday" } })), UserError);
+  assert.throws(() => loadConfig(tempRepo({ discovery: { cloneRoots: "home" } })), UserError);
+  assert.throws(() => loadConfig(tempRepo("{ not json")), UserError);
+  assert.throws(() => loadConfig(tempRepo('"a bare string"')), UserError);
+});
+
+test('--since accepts durations and an explicit "all"', () => {
+  assert.equal(parseSince("30d"), 30 * 86_400_000);
+  assert.equal(parseSince("12h"), 12 * 3_600_000);
+  assert.equal(parseSince("2w"), 2 * 604_800_000);
+  assert.equal(parseSince("90m"), 90 * 60_000);
+  assert.equal(parseSince("all"), null);
+  assert.equal(sinceCutoff("all"), null);
+  assert.equal(sinceCutoff("1d", 1_000_000_000), 1_000_000_000 - 86_400_000);
+  assert.throws(() => parseSince("30 fortnights"), UserError);
+});
+
+test("evidence is keyed to both the transcript and the memory file it was judged against", () => {
+  const transcript = { mtimeMs: 111, bytes: 222 };
+  const key = evidenceKey(transcript, "sha256:aaa");
+  const evidence = { status: "ok", key };
+
+  assert.equal(isEvidenceFresh(evidence, transcript, "sha256:aaa"), true);
+  assert.equal(isEvidenceFresh(evidence, transcript, "sha256:bbb"), false, "edited weights invalidate evidence");
+  assert.equal(
+    isEvidenceFresh(evidence, { mtimeMs: 999, bytes: 222 }, "sha256:aaa"),
+    false,
+    "a changed transcript invalidates",
+  );
+  assert.equal(isEvidenceFresh({ status: "failed", key }, transcript, "sha256:aaa"), false, "failures are retried");
+  assert.equal(
+    isEvidenceFresh({ status: "skipped", key }, transcript, "sha256:aaa"),
+    false,
+    "skip decisions depend on config, so they are re-derived rather than cached",
+  );
+  assert.equal(isEvidenceFresh(null, transcript, "sha256:aaa"), false);
+});
+
+test("state round-trips through disk and survives a corrupt file", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "backpass-state-"));
+  const state = new State(dir).ensure();
+
+  const sourceA = { harness: "claude", nativeId: "abc", id: "claude-abc", path: "/store/a.jsonl" };
+  const sourceB = { harness: "claude", nativeId: "abc", id: "claude-abc", path: "/store/b.jsonl" };
+  state.writeEvidence(sourceA, { status: "ok", key: "a" });
+  state.writeEvidence(sourceB, { status: "ok", key: "b" });
+  assert.equal(state.readEvidence(sourceA).key, "a");
+  assert.equal(state.readEvidence(sourceB).key, "b");
+  assert.notEqual(state.evidencePath(sourceA), state.evidencePath(sourceB));
+
+  const legacy = { harness: "pi", id: "pi-old", path: "/store/old.jsonl", mtimeMs: 11, bytes: 22 };
+  state.writeEvidence(legacy.id, {
+    status: "ok",
+    transcript: legacy,
+    memoryHash: "sha256:old",
+    key: "11:22:sha256:old",
+  });
+  const migrated = state.readEvidence({ ...legacy, nativeId: "old" });
+  assert.equal(migrated.key, "11:22:sha256:old");
+  assert.equal(migrated.transcript.identity.length, 64);
+  assert.equal(fs.existsSync(state.evidencePath(legacy.id)), false);
+
+  state.writeEvidence(legacy.id, {
+    status: "ok",
+    transcript: legacy,
+    memoryHash: "sha256:old",
+    key: "11:22:sha256:old",
+  });
+  const listed = state.listEvidence();
+  assert.equal(listed.length, 3, "an interrupted migration cannot duplicate folded evidence");
+  assert.equal(listed.find((evidence) => evidence.transcript?.id === legacy.id).key, migrated.key);
+  assert.equal(state.readEvidence({ ...legacy, nativeId: "old" }).key, migrated.key);
+  assert.equal(fs.existsSync(state.evidencePath(legacy.id)), false);
+
+  state.writeScanCache({ version: 1, entries: { a: { mtimeMs: 1, bytes: 2, descriptor: null } } });
+  assert.equal(Object.keys(state.readScanCache().entries).length, 1);
+
+  fs.writeFileSync(state.scanCachePath, "not json at all");
+  assert.deepEqual(state.readScanCache(), { version: 1, entries: {} }, "a corrupt cache resets instead of crashing");
+});
+
+test("an interrupted legacy evidence migration remains stale under the current analysis index", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "backpass-state-migration-"));
+  const state = new State(dir).ensure();
+  const legacy = { harness: "pi", id: "pi-old", path: "/store/old.jsonl", mtimeMs: 11, bytes: 22 };
+  const transcript = { ...legacy, nativeId: "old" };
+  const memoryHash = "sha256:old";
+
+  state.writeEvidence(legacy.id, {
+    status: "ok",
+    transcript: legacy,
+    memoryHash,
+    key: `11:22:${memoryHash}`,
+  });
+  fs.renameSync(state.evidencePath(legacy.id), state.evidencePath(transcript));
+
+  const recovered = state.readEvidence(transcript);
+  assert.equal(isEvidenceFresh(recovered, transcript, memoryHash), false);
+  assert.equal(state.readEvidence(transcript).key, `11:22:${memoryHash}`);
+});
+
+test("transcript ids are turned into safe filenames", () => {
+  assert.equal(safeFileName("claude-abc/../../etc/passwd"), "claude-abc_.._.._etc_passwd");
+  assert.equal(safeFileName("opencode:ses_25de1e"), "opencode_ses_25de1e");
+});
+
+test("user-scope config ignores a checkout .backpassrc.json and defaults minGapProjects to 1", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "backpass-user-cfg-"));
+  const repo = tempRepo({ budgetTokens: 1111, minGapProjects: 9 });
+  const prev = process.env.XDG_CONFIG_HOME;
+  process.env.XDG_CONFIG_HOME = path.join(home, ".config");
+  try {
+    const user = loadConfig(repo, {}, { kind: "user" });
+    assert.equal(user.budgetTokens, 5000);
+    assert.equal(user.minGapProjects, 1);
+    assert.deepEqual(user.memoryFiles[0], ".agents/AGENTS.md");
+    assert.deepEqual(user.discovery.harnesses, ["claude", "codex"]);
+    assert.deepEqual(initialUserConfig().discovery.harnesses, ["claude", "codex"]);
+    const project = loadConfig(repo);
+    assert.equal(project.budgetTokens, 1111);
+    assert.equal(project.minGapProjects, 9);
+    assert.throws(() => loadConfig(tempRepo({ minGapProjects: 0 })), UserError);
+    assert.throws(() => parseScopeKind("global"), UserError);
+    assert.equal(parseScopeKind(""), "project");
+  } finally {
+    if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = prev;
+  }
+});
+
+test("user-scope defaults honor relocated Claude and Codex homes", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "backpass-relocated-homes-"));
+  const previous = {
+    XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+    CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
+    CODEX_HOME: process.env.CODEX_HOME,
+  };
+  process.env.XDG_CONFIG_HOME = path.join(home, ".config");
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, "claude-work");
+  process.env.CODEX_HOME = path.join(home, "codex-work");
+  try {
+    const config = loadConfig(null, {}, { kind: "user" });
+    assert.deepEqual(config.memoryFiles, [
+      ".agents/AGENTS.md",
+      path.join(home, "claude-work", "CLAUDE.md"),
+      path.join(home, "codex-work", "AGENTS.md"),
+    ]);
+    assert.deepEqual(config.skillsDirs, [
+      ".agents/skills",
+      path.join(home, "claude-work", "skills"),
+      path.join(home, "codex-work", "skills"),
+    ]);
+    const initialized = initialUserConfig();
+    assert.equal("memoryFiles" in initialized, false);
+    assert.equal("skillsDirs" in initialized, false);
+    const configPath = path.join(home, ".config", "backpass", "config.json");
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ user: initialized }));
+    const reloaded = loadConfig(null, {}, { kind: "user" });
+    assert.deepEqual(reloaded.memoryFiles, config.memoryFiles);
+    assert.deepEqual(reloaded.skillsDirs, config.skillsDirs);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});

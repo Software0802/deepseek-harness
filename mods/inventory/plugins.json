@@ -1,0 +1,178 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-25T13:49:14.954Z",
+  "target": {
+    "app": "DeepSeek Harness desktop",
+    "dshVersion": "0.2.1-rc.3",
+    "profile": "desktop"
+  },
+  "plugins": [
+    {
+      "id": "@deepseek-ai/dsh-subagent-claude-code",
+      "version": "0.2.1-rc.3",
+      "install": "@deepseek-ai/dsh-subagent-claude-code@0.2.1-rc.3",
+      "source": "npm",
+      "enabled": true,
+      "category": "features",
+      "purpose": "Claude Code 子代理供应商",
+      "license": "MIT",
+      "client": {
+        "hasClient": false,
+        "requireAsset": null
+      }
+    },
+    {
+      "id": "@local/agent-hub",
+      "version": "0.3.0",
+      "install": "link:/Users/zhikun.lu/Project/deepseekProject/agent-hub",
+      "source": "link",
+      "enabled": true,
+      "category": "features",
+      "purpose": "接入 Droid/Claude Code/Codex/OpenCode/Devin 子代理供应商（本地 link 包）",
+      "license": "unknown",
+      "client": {
+        "hasClient": true,
+        "requireAsset": 0
+      }
+    },
+    {
+      "id": "@xmanrui/dsh-im",
+      "version": "5.6.0",
+      "install": "@xmanrui/dsh-im@5.6.0",
+      "source": "npm",
+      "enabled": true,
+      "category": "features",
+      "purpose": "把飞书/微信/企微/钉钉/QQ/Slack/Telegram/Discord/WhatsApp/Matrix 等 IM 机器人接入 DSH",
+      "license": "MIT",
+      "client": {
+        "hasClient": true,
+        "requireAsset": 0
+      }
+    },
+    {
+      "id": "dsh-plugins-store",
+      "version": "0.1.4",
+      "install": "dsh-plugins-store@0.1.4",
+      "source": "npm",
+      "enabled": true,
+      "category": "features",
+      "purpose": "DSH 插件商店（浏览/安装第三方插件）",
+      "license": "MIT",
+      "client": {
+        "hasClient": true,
+        "requireAsset": 0
+      }
+    },
+    {
+      "id": "dsh-zen-remote",
+      "version": "2.2.8",
+      "install": "dsh-zen-remote@2.2.8",
+      "source": "npm",
+      "enabled": true,
+      "category": "features",
+      "purpose": "手机或另一台电脑远程使用 DSH（配对网关、PWA、Web Push、远程会话）",
+      "license": "MIT",
+      "client": {
+        "hasClient": true,
+        "requireAsset": 0
+      }
+    },
+    {
+      "id": "@nonamelego/dsh-catppuccin",
+      "version": "0.6.4",
+      "install": "@nonamelego/dsh-catppuccin@^0.6.4",
+      "source": "npm",
+      "enabled": true,
+      "category": "ui",
+      "purpose": "Catppuccin 四套配色（Latte/Frappé/Macchiato/Mocha）+ 玻璃质感",
+      "license": "MIT",
+      "client": {
+        "hasClient": true,
+        "requireAsset": 0
+      }
+    },
+    {
+      "id": "@smalltailqwq/dsh-client-ui-skin-maid-atelier",
+      "version": "0.1.9",
+      "install": "@smalltailqwq/dsh-client-ui-skin-maid-atelier@^0.1.9",
+      "source": "npm",
+      "enabled": true,
+      "category": "ui",
+      "purpose": "鲸鱼娘皮肤 · 深海女仆工坊（当前被皮肤管理器禁用状态托管）",
+      "license": "SEE LICENSE IN LICENSE",
+      "client": {
+        "hasClient": true,
+        "requireAsset": 0
+      }
+    },
+    {
+      "id": "@smalltailqwq/dsh-client-ui-skin-orca-link",
+      "version": "0.1.9",
+      "install": "@smalltailqwq/dsh-client-ui-skin-orca-link@^0.1.9",
+      "source": "npm",
+      "enabled": true,
+      "category": "ui",
+      "purpose": "鲸鱼娘皮肤 · 虎鲸链路（当前被皮肤管理器禁用状态托管）",
+      "license": "SEE LICENSE IN LICENSE",
+      "client": {
+        "hasClient": true,
+        "requireAsset": 0
+      }
+    }
+  ],
+  "bundles": [
+    "@deepseek-ai/dsh-base",
+    "@deepseek-ai/dsh-web-app",
+    "@deepseek-ai/dsh-experimental-auto-review",
+    "@deepseek-ai/dsh-experimental-voice-input-bundle",
+    "@deepseek-ai/dsh-experimental-agent-team-profile",
+    "@deepseek-ai/dsh-experimental-inspector-profile",
+    "@deepseek-ai/dsh-experimental-tool-worktree",
+    "@deepseek-ai/dsh-experimental-terminal-bundle",
+    "@deepseek-ai/dsh-experimental-session-search",
+    "@deepseek-ai/dsh-experimental-session-titles-bundle",
+    "@deepseek-ai/dsh-experimental-badge-skill-bundle",
+    "@deepseek-ai/dsh-experimental-ralph-bundle",
+    "@deepseek-ai/dsh-experimental-plugin-market-bundle",
+    "dsh-plugins-store",
+    "@local/agent-hub",
+    "@deepseek-ai/dsh-experimental-cot-translation-bundle",
+    "@nonamelego/dsh-catppuccin",
+    "@smalltailqwq/dsh-client-ui-skin-maid-atelier",
+    "@smalltailqwq/dsh-client-ui-skin-orca-link",
+    "@deepseek-ai/dsh-subagent-claude-code",
+    "@xmanrui/dsh-im",
+    "dsh-zen-remote"
+  ],
+  "builtinBundles": [
+    "@deepseek-ai/dsh-base",
+    "@deepseek-ai/dsh-web-app",
+    "@deepseek-ai/dsh-experimental-auto-review",
+    "@deepseek-ai/dsh-experimental-voice-input-bundle",
+    "@deepseek-ai/dsh-experimental-agent-team-profile",
+    "@deepseek-ai/dsh-experimental-inspector-profile",
+    "@deepseek-ai/dsh-experimental-tool-worktree",
+    "@deepseek-ai/dsh-experimental-terminal-bundle",
+    "@deepseek-ai/dsh-experimental-session-search",
+    "@deepseek-ai/dsh-experimental-session-titles-bundle",
+    "@deepseek-ai/dsh-experimental-badge-skill-bundle",
+    "@deepseek-ai/dsh-experimental-ralph-bundle",
+    "@deepseek-ai/dsh-experimental-plugin-market-bundle",
+    "@deepseek-ai/dsh-experimental-cot-translation-bundle"
+  ],
+  "config": {
+    "patch": "profile.patch.yml"
+  },
+  "localTools": [
+    {
+      "id": "backpass",
+      "path": "mods/features/backpass",
+      "source": "fork: https://github.com/kunchenguid/backpass",
+      "version": "0.1.43+dsh",
+      "purpose": "AGENTS.md 反向传播训练：读本地 agent 会话 transcript，提议证据化编辑。含本仓库维护的 DSH adapter",
+      "license": "MIT",
+      "install": "cd mods/features/backpass && pnpm install && node bin/backpass.js",
+      "requires": ["node>=22.5", "zstd", "acpx", "lavish-axi(可选, apply review UI)"]
+    }
+  ]
+}

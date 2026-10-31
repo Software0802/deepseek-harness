@@ -1,0 +1,397 @@
+import { consolidateGapLedger } from "../consolidate.js";
+import { foldEvidence } from "../fold.js";
+import {
+  ledgerGapObservations,
+  normalizeGapLedgerSessions,
+  pruneGapLedger,
+  recordGapObservations,
+  resolveGapObservationObserver,
+} from "../gap-ledger.js";
+import { synthesizeProposal } from "../synthesize.js";
+import { ProposalViolation } from "../proposal.js";
+import { classifyInteraction, formatCorpusMix, INTERACTIVE, NON_INTERACTIVE } from "../interaction.js";
+import { UserError, color, info, json, out, terminalSafe } from "../logger.js";
+import { budgetBar, formatTokens } from "../tokens.js";
+import { emitProgress } from "../progress.js";
+import { nestedCorpora, primaryMemoryFile } from "./analyze.js";
+import { mergeNestedProposals, nestedContext, nestedReachWarning, routingFor } from "../nested.js";
+import { printUsage } from "./usage.js";
+import { closeRemoteDiscovery, discoverForRun } from "./scan.js";
+import { capTranscripts } from "../sample.js";
+import { isEvidenceFresh } from "../state.js";
+import { corroborationIdentityOf, transcriptIdentity } from "../transcript.js";
+import { pruneHostCache } from "../discovery/cache.js";
+
+/**
+ * Fold on-disk evidence for the memory surface. Gap sightings persist across runs, but
+ * corroboration is bounded to sessions in this run's selected sample: record this run's
+ * observations, prune what the current surface now covers or what aged out (after recording, because
+ * the evidence files that fed an expired sighting are still on disk and would re-add it),
+ * then cluster from the ledger.
+ *
+ * Evidence is filtered to selected transcript identities, the current memory hash and
+ * analysis-index cache key, and a valid interaction category. Reanalysis rewrites a
+ * transcript's evidence when an input changes, but records outside this run's window or
+ * cap remain on disk. Folding those records would inflate `analyzedSessions` beyond the
+ * sampled corpus or score positional instruction aliases against an index they never saw.
+ * Legacy records stay excluded until ordinary discovery and analysis backfill them.
+ * Current discovery's interaction and corroboration fields are overlaid only after
+ * admission, so stale stamps and observer identities from missing ancestors do not
+ * survive in the fold.
+ */
+export async function foldForRun(ctx, memoryFile, memoryHash, skills = [], transcripts = [], { route = null } = {}) {
+  const { state, minGapEvidence, gapLedgerMaxAge } = ctx.config;
+  const selectedByIdentity = new Map(transcripts.map((transcript) => [transcriptIdentity(transcript), transcript]));
+  const evidence = state.listEvidence();
+  const identitiesByLegacyId = new Map();
+  for (const record of evidence) {
+    const legacyId = record.transcript?.id;
+    if (!legacyId) continue;
+    if (!identitiesByLegacyId.has(legacyId)) identitiesByLegacyId.set(legacyId, new Set());
+    identitiesByLegacyId.get(legacyId).add(transcriptIdentity(record.transcript));
+  }
+  const selectedGapSessions = new Set();
+  const selectedObserversByNative = new Map();
+  const legacyIds = new Set();
+  for (const transcript of transcripts) {
+    selectedGapSessions.add(corroborationIdentityOf(transcript));
+    const nativeIdentity = transcript.identity || transcript.id;
+    if (!selectedObserversByNative.has(nativeIdentity)) selectedObserversByNative.set(nativeIdentity, new Set());
+    selectedObserversByNative.get(nativeIdentity).add(corroborationIdentityOf(transcript));
+    const identities = identitiesByLegacyId.get(transcript.id);
+    if (identities?.size === 1 && identities.has(transcriptIdentity(transcript))) {
+      legacyIds.add(transcript.id);
+      if (!selectedObserversByNative.has(transcript.id)) selectedObserversByNative.set(transcript.id, new Set());
+      selectedObserversByNative.get(transcript.id).add(corroborationIdentityOf(transcript));
+    }
+  }
+  const relevant = [];
+  for (const record of evidence) {
+    const currentTranscript = selectedByIdentity.get(transcriptIdentity(record.transcript));
+    if (
+      record.memoryPath !== memoryFile.path ||
+      record.memoryHash !== memoryHash ||
+      (record.transcript?.interaction !== INTERACTIVE && record.transcript?.interaction !== NON_INTERACTIVE) ||
+      !currentTranscript ||
+      !isEvidenceFresh(record, currentTranscript, memoryHash)
+    ) {
+      continue;
+    }
+    const transcript = {
+      ...record.transcript,
+      interactionSignals: currentTranscript.interactionSignals,
+      interaction: classifyInteraction(currentTranscript),
+      parentSessionId: currentTranscript.parentSessionId || null,
+      corroborationIdentity: corroborationIdentityOf(currentTranscript),
+      corroborationNativeId: currentTranscript.corroborationNativeId || null,
+      corroborationStartedAt: currentTranscript.corroborationStartedAt ?? null,
+    };
+    relevant.push({ ...record, transcript });
+  }
+
+  const ledger = state.readGapLedger();
+  normalizeGapLedgerSessions(ledger, transcripts, { legacyIds });
+  recordGapObservations(ledger, relevant, { skills, legacyIds, transcripts });
+  // Consolidate after recording, so the pass sees this run's sightings too: two
+  // sessions coining the same brand-new gap in one parallel fan-out can only line up
+  // here. One bounded judged call; a failure degrades to lexical identity and the run
+  // continues. Prune afterwards so a merged-then-covered gap retires as one entry.
+  // Skills join the coverage check: a gap resolved by an extraction or a skill fix
+  // retires instead of haunting the open-gap index until it expires.
+  const consolidation = await consolidateGapLedger({
+    ledger,
+    memoryPath: memoryFile.path,
+    config: ctx.config,
+    repo: ctx.repo,
+    modelCwd: ctx.scope?.modelCwd || ctx.repo?.root,
+  });
+  pruneGapLedger(ledger, { memoryFile, memoryPath: memoryFile.path, skills, maxAge: gapLedgerMaxAge });
+  state.writeGapLedger(ledger);
+
+  const gapObservations = ledgerGapObservations(ledger, memoryFile.path, skills)
+    .map((observation) => ({
+      ...observation,
+      sessionId: resolveGapObservationObserver(observation, selectedObserversByNative) ?? observation.sessionId,
+    }))
+    .filter((observation) => {
+      if (!selectedGapSessions.has(observation.sessionId)) return false;
+      const observers = selectedObserversByNative.get(observation.sourceSessionId);
+      return !observers || (observers.size === 1 && observers.has(observation.sessionId));
+    });
+  const summary = foldEvidence(relevant, {
+    minGapEvidence,
+    minGapProjects: ctx.scope?.kind === "user" ? ctx.config.minGapProjects || 1 : 0,
+    checkProjectCoverage: ctx.scope?.kind === "user",
+    memoryFile,
+    gapObservations,
+    skills,
+    route,
+  });
+  summary.consolidation = consolidation;
+  return summary;
+}
+
+export function accountForConsolidationUsage(proposal, summary) {
+  if (summary.consolidation?.usage) {
+    proposal.usage = [summary.consolidation.usage, ...(proposal.usage || [])];
+  }
+}
+
+export async function runProposal(ctx, precomputed = null) {
+  try {
+    return await runProposalCore(ctx, precomputed);
+  } finally {
+    await closeRemoteDiscovery(ctx);
+    pruneHostCache(ctx.config.state.root);
+  }
+}
+
+async function runProposalCore(ctx, precomputed) {
+  const { repo, config } = ctx;
+  // Starting a new proposal run invalidates the previous result immediately. Discovery,
+  // folding, and agent resolution can all fail before synthesis starts; none of those
+  // failures may leave an older proposal available to apply as if it came from this run.
+  config.state.clearProposal();
+  const memory = precomputed || primaryMemoryFile(repo, config, ctx.scope);
+  const { file, hash, skills } = memory;
+  const transcripts = precomputed?.transcripts || capTranscripts(await discoverForRun(ctx), config).transcripts;
+  const weights = precomputed ? (precomputed.nested || []).map((entry) => entry.weight) : memory.nested || [];
+  const { corpora, attribution } = await nestedCorpora(ctx, weights, transcripts, precomputed?.attribution);
+  const routing = (weight) => (corpora.length ? routingFor(weights, attribution, file.path, weight) : null);
+
+  const foldStarted = Date.now();
+  const summary = await foldForRun(ctx, file, hash, skills ?? [], transcripts, { route: routing(null) });
+  config.state.writeSummary(summary);
+  emitProgress("fold:done", {
+    instructions: summary.instructions.length,
+    clustersFound:
+      summary.totals.gapClusters + (summary.totals.reportOnlyGapClusters || 0) + summary.totals.droppedGapSingletons,
+    clustersKept: summary.totals.gapClusters,
+    minGapEvidence: config.minGapEvidence,
+    ms: Date.now() - foldStarted,
+  });
+
+  if (!summary.analyzedSessions) {
+    throw new UserError(
+      "no loss calculated yet: nothing to run gradient descent on",
+      "run `backpass analyze` first, or `backpass` for the full pass",
+    );
+  }
+
+  const passes = [];
+  for (const corpus of corpora) {
+    passes.push(
+      await proposeNested(ctx, { skills: skills ?? [], corpus, routing, rootOwnedGaps: summary.rootOwnedGaps }),
+    );
+  }
+  const rootRouting = routing(null);
+  const { proposal: rootProposal } = await synthesizeProposal({
+    memoryFile: file,
+    summary,
+    config,
+    repo,
+    transcripts,
+    scope: ctx.scope,
+    routing: rootRouting && { ...rootRouting, allowUnchangedRoot: passes.some((pass) => pass.proposal !== null) },
+  });
+
+  accountForConsolidationUsage(rootProposal, summary);
+  const proposal = passes.length
+    ? mergeNestedProposals(rootProposal, passes, {
+        sampledSessions: transcripts.length,
+        minGapEvidence: config.minGapEvidence,
+      })
+    : rootProposal;
+  config.state.writeProposal(proposal);
+  return { proposal, summary, memoryFile: file };
+}
+
+/**
+ * One nested memory file's step, in its own state: fold its corpus, then synthesize
+ * against it under its own budget. A failed synthesis fails the run, named by file.
+ */
+async function proposeNested(ctx, { skills, corpus, routing, rootOwnedGaps }) {
+  const { weight, transcripts } = corpus;
+  const nested = nestedContext(ctx, weight);
+  const pass = { weight, transcripts, cap: nested.config.budgetTokens, summary: null, proposal: null, skipped: null };
+  if (!transcripts.length) {
+    pass.skipped = "nothing to learn from this run";
+    return pass;
+  }
+  nested.config.state.clearProposal();
+  const route = { ...routing(weight.path), rootOwnedGaps };
+  pass.summary = await foldForRun(nested, weight.file, weight.hash, skills, transcripts, { route });
+  nested.config.state.writeSummary(pass.summary);
+  if (!pass.summary.analyzedSessions) {
+    pass.skipped = "its sessions are not analyzed yet; run `backpass analyze`";
+    return pass;
+  }
+  try {
+    const { proposal } = await synthesizeProposal({
+      memoryFile: weight.file,
+      summary: pass.summary,
+      config: nested.config,
+      repo: ctx.repo,
+      transcripts,
+      scope: ctx.scope,
+      routing: route,
+    });
+    pass.proposal = proposal;
+  } catch (err) {
+    if (err instanceof ProposalViolation) err.message = `${weight.path}: ${err.message}`;
+    throw err;
+  }
+  return pass;
+}
+
+/**
+ * @param {object} proposal
+ * @param {{ applied?: boolean, analysisUsage?: import("../acpx.js").UsageRecord[] }} [options]
+ *   `analysisUsage` is the tier-1 accounting of the same run, when the caller ran it.
+ */
+export function printProposal(proposal, { applied = false, analysisUsage = [] } = {}) {
+  out("");
+  const mix = proposal.stats.corpusMix ? ` · ${formatCorpusMix(proposal.stats.corpusMix)}` : "";
+  out(
+    `${color.bold("proposal")} · ${proposal.repo.name} · ${proposal.memoryFile.path} · ` +
+      `${proposal.edits.length} edit(s) from ${proposal.stats.transcripts} session(s)${mix}`,
+  );
+  out(
+    `  budget ${budgetBar(proposal.budget)} ${formatTokens(proposal.budget.current)} -> ` +
+      `${formatTokens(proposal.budget.projected)} / ${formatTokens(proposal.budget.capTokens)} tok` +
+      (proposal.budget.mode === "shrink"
+        ? color.dim(`  [shrink plan: ${formatTokens(proposal.budget.over)} still over]`)
+        : ""),
+  );
+  out(
+    `  evidence: ${proposal.stats.positive} positive · ${proposal.stats.negative} negative · ` +
+      `${proposal.stats.gapClusters} gap clusters`,
+  );
+  for (const nested of proposal.nested || []) {
+    const sessions =
+      nested.sampledSessions != null
+        ? `${nested.sessions} of ${nested.sampledSessions} sampled session(s) worked only under ${nested.dir}/`
+        : `${nested.sessions} session(s) under ${nested.dir}/`;
+    const head = `  nested ${nested.memoryFile.path} · ${sessions}`;
+    out(
+      nested.skipped
+        ? `${head} · ${color.dim(nested.skipped)}`
+        : `${head} · budget ${budgetBar(nested.budget)} ${formatTokens(nested.budget.current)} -> ` +
+            `${formatTokens(nested.budget.projected)} / ${formatTokens(nested.budget.capTokens)} tok`,
+    );
+    // Report-only: the count explains an empty result, it never gates one.
+    const warning = nestedReachWarning(nested);
+    if (warning) out(`    ${color.yellow(warning)}`);
+  }
+  out("");
+
+  if (!proposal.edits.length) {
+    out("  no edits proposed - the evidence did not clear the thresholds this run");
+  }
+
+  for (const edit of proposal.edits) {
+    const kind = edit.kind === "extract" ? "EXTRACT" : edit.kind.toUpperCase();
+    const delta = edit.deltaTokens || 0;
+    out(
+      `  ${color.cyan(edit.id)} ${kind.padEnd(8)} ${edit.nestedMemoryFile ? `${edit.nestedMemoryFile}: ` : ""}${edit.title} ` +
+        color.dim(
+          `(${delta > 0 ? "+" : ""}${delta} tok, ${edit.transcripts} transcript(s)` +
+            (edit.projects != null ? `, projects=${edit.projects}` : "") +
+            `)`,
+        ),
+    );
+  }
+
+  for (const note of proposal.notes || []) out(color.dim(`  note: ${terminalSafe(note)}`));
+
+  printUsage({ tier1: analysisUsage, tier2: proposal.usage || [] });
+  if (applied) return;
+  out("");
+  out("Review and apply with `backpass apply` (nothing has been written).");
+}
+
+/** True when a violation is about the always-loaded budget rather than the annotation. */
+const isBudgetViolation = (v) => /-token budget/.test(v);
+const isEditCapViolation = (v) => /per-run cap is \d+/.test(v);
+
+/**
+ * What to actually try next, read off the condition the run ended on.
+ *
+ * The old advice - a stronger model, a bigger budget, a higher edit cap - was printed for
+ * every failure, including the ones where the model never spoke and the ones where the
+ * budget was never the constraint. Each terminal condition has a different repair.
+ */
+export function synthesisFailureHint(err) {
+  if (err.reason === "empty") {
+    return "the synthesis harness returned no text, so nothing about the model, the budget, or the edit cap was the constraint; run `backpass propose` again to start a fresh synthesis session";
+  }
+  if (err.reason === "unparseable") {
+    return "the model answered but not with a JSON object; run `backpass propose` again, or pin a different harness with --synthesis-agent";
+  }
+  if (err.reason === "editing") {
+    return "the agent kept rewriting the staging copy instead of describing it; run `backpass propose` again to start fresh";
+  }
+  if (err.reason === "edit-empty") {
+    return "the edit turn made no changes to the staging copy, so there was nothing for the annotation turn to describe; run `backpass propose` again, or pin a different harness with --synthesis-agent";
+  }
+  const violations = err.violations || [];
+  if (violations.some(isBudgetViolation)) {
+    return "the edit set did not clear the budget gate: raise --budget, or let the shrink continue over more runs";
+  }
+  if (violations.some(isEditCapViolation)) {
+    return "the annotation proposed more edits than the per-run learning rate allows: raise --max-edits, or re-run and let the next pass take the rest";
+  }
+  return "the gates above are what the next synthesis must satisfy; run `backpass propose` again";
+}
+
+/**
+ * Report a synthesis that ended without a valid proposal: loudly, and about the turn that
+ * actually ended it (design section 6).
+ *
+ * The saved proposal and the terminal condition can be from different turns - a run whose
+ * last turn was empty leaves the rejected proposal of an earlier one on disk - so the
+ * provenance is printed rather than letting the older violations read as this turn's.
+ */
+export function printSynthesisFailure(err, state) {
+  info("");
+  for (const violation of err.violations) info(`  ${color.red("x")} ${violation}`);
+  info("");
+  if (!err.saved) {
+    info(color.dim("  no proposal was saved: no annotation turn produced one"));
+    return;
+  }
+  info(color.dim(`  the rejected proposal was saved to ${err.proposalPath || state.proposalPath}`));
+  if (err.reason !== "gates") {
+    info(color.dim(`  it is from annotation attempt ${err.saved.attempt}, not the turn above, and it lists:`));
+    for (const violation of err.saved.violations) info(color.dim(`    - ${violation}`));
+  }
+  const notes = rejectedProposalNotes(err, state);
+  if (notes.length) {
+    info(color.dim("  the rejected proposal noted:"));
+    for (const note of notes) info(`    ${terminalSafe(note)}`);
+  }
+}
+
+function rejectedProposalNotes(err, state) {
+  if (Array.isArray(err.saved?.notes) && err.saved.notes.length) return err.saved.notes.map(String);
+  const proposal = state?.readProposal?.();
+  return Array.isArray(proposal?.notes) ? proposal.notes.map(String).filter(Boolean) : [];
+}
+
+export async function cmdPropose(ctx) {
+  try {
+    const { proposal } = await runProposal(ctx);
+    if (ctx.flags.json) {
+      json(proposal);
+      return 0;
+    }
+    printProposal(proposal);
+    return 0;
+  } catch (err) {
+    if (err instanceof ProposalViolation) {
+      printSynthesisFailure(err, ctx.config.state);
+      throw new UserError(err.message, synthesisFailureHint(err));
+    }
+    throw err;
+  }
+}

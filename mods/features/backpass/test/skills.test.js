@@ -1,0 +1,450 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import {
+  CANONICAL_SKILLS_DIR,
+  CLAUDE_SKILLS_LINK,
+  CLAUDE_SKILLS_LINK_TARGET,
+  ensureSkillsLayout,
+  loadProjectSkills,
+  loadSkills,
+  loadedCopies,
+  skillDescriptionTokens,
+  renderSkillIndexForAnalysis,
+  parseFrontmatter,
+  renderSkillFile,
+  resolveOverflowTarget,
+  writeSkill,
+} from "../src/skills.js";
+import { applyDecisions } from "../src/apply/writer.js";
+import { DEFAULT_CONFIG } from "../src/config.js";
+import { UserError } from "../src/logger.js";
+
+function tmpRepo() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "backpass-skills-"));
+}
+
+const SKILL = {
+  name: "release-signing",
+  description: "Use when signing a release\nor rotating the signing key.",
+  body: "# Release signing\n\n1. Fetch the key.\n2. Sign the tarball.\n",
+  path: `${CANONICAL_SKILLS_DIR}/release-signing/SKILL.md`,
+};
+
+test("the default skills dir is the auto-loaded .agents/skills", () => {
+  assert.equal(DEFAULT_CONFIG.skillsDir, CANONICAL_SKILLS_DIR);
+});
+
+test("generated SKILL.md frontmatter marks the skill non-invocable and internal", () => {
+  const text = renderSkillFile(SKILL);
+  const lines = text.split("\n");
+  assert.equal(lines[0], "---");
+  assert.ok(lines.includes("user-invocable: false"), text);
+  const metadataAt = lines.indexOf("metadata:");
+  assert.ok(metadataAt > 0, text);
+  assert.equal(lines[metadataAt + 1], "  internal: true");
+  assert.equal(lines[metadataAt + 2], "---");
+  const frontmatter = parseFrontmatter(text);
+  assert.equal(frontmatter.name, "release-signing");
+  assert.equal(frontmatter.description, "Use when signing a release or rotating the signing key.");
+  assert.equal(frontmatter["user-invocable"], "false");
+  assert.ok(text.endsWith("2. Sign the tarball.\n"));
+});
+
+test("parseFrontmatter folds a >- block-scalar description without leaking the indicator", () => {
+  const text = [
+    "---",
+    "name: away-mode",
+    "description: >-",
+    "  Enter away-mode when the user asks to step away from the",
+    "  keyboard for an extended period.",
+    "---",
+    "# Away mode",
+    "",
+  ].join("\n");
+  const frontmatter = parseFrontmatter(text);
+  assert.equal(
+    frontmatter.description,
+    "Enter away-mode when the user asks to step away from the keyboard for an extended period.",
+  );
+  assert.ok(!/^[>|]/.test(frontmatter.description));
+  assert.ok(!frontmatter.description.includes(">-"));
+});
+
+test("parseFrontmatter handles > and | block-scalar indicators with all chomping suffixes", () => {
+  const cases = [
+    { indicator: ">", expected: "Enter away-mode when idle.\nResume when the user returns.\n" },
+    { indicator: ">-", expected: "Enter away-mode when idle.\nResume when the user returns." },
+    { indicator: ">+", expected: "Enter away-mode when idle.\nResume when the user returns.\n\n\n" },
+    { indicator: "|", expected: "Enter away-mode\nwhen idle.\n\nResume when the user returns.\n" },
+    { indicator: "|-", expected: "Enter away-mode\nwhen idle.\n\nResume when the user returns." },
+    { indicator: "|+", expected: "Enter away-mode\nwhen idle.\n\nResume when the user returns.\n\n\n" },
+  ];
+  for (const { indicator, expected } of cases) {
+    const text = [
+      "---",
+      "name: away-mode",
+      `description: ${indicator}`,
+      "  Enter away-mode",
+      "  when idle.",
+      "",
+      "  Resume when the user returns.",
+      "",
+      "",
+      "---",
+      "# Away mode",
+      "",
+    ].join("\n");
+    const frontmatter = parseFrontmatter(text);
+    assert.equal(frontmatter.description, expected, `indicator ${indicator}`);
+    assert.ok(!/^[>|]/.test(frontmatter.description), `indicator ${indicator} leaked marker`);
+  }
+});
+
+test("writeSkill lands in .agents/skills and links .claude/skills to it", () => {
+  const root = tmpRepo();
+  const result = writeSkill(root, SKILL);
+
+  const canonical = path.join(root, CANONICAL_SKILLS_DIR, "release-signing", "SKILL.md");
+  assert.equal(result.target, canonical);
+  assert.ok(fs.existsSync(canonical));
+  assert.ok(!fs.existsSync(path.join(root, "skills")));
+
+  const link = path.join(root, CLAUDE_SKILLS_LINK);
+  assert.ok(fs.lstatSync(link).isSymbolicLink());
+  assert.equal(fs.readlinkSync(link), CLAUDE_SKILLS_LINK_TARGET);
+  assert.equal(fs.readFileSync(path.join(link, "release-signing", "SKILL.md"), "utf8"), renderSkillFile(SKILL));
+  assert.deepEqual(result.created, [CANONICAL_SKILLS_DIR, `${CLAUDE_SKILLS_LINK} -> ${CLAUDE_SKILLS_LINK_TARGET}`]);
+  assert.deepEqual(result.warnings, []);
+
+  // Both harness views index the same single file.
+  assert.deepEqual(
+    loadSkills(root, CLAUDE_SKILLS_LINK).map((s) => s.name),
+    loadSkills(root, CANONICAL_SKILLS_DIR).map((s) => s.name),
+  );
+
+  const again = writeSkill(root, SKILL);
+  assert.deepEqual(again.created, []);
+});
+
+test("resolveOverflowTarget honors an existing configured directory", () => {
+  const empty = tmpRepo();
+  assert.deepEqual(resolveOverflowTarget(empty), { kind: "skills", dir: CANONICAL_SKILLS_DIR, warnings: [] });
+  assert.equal(resolveOverflowTarget(empty, ".claude/skills").dir, CANONICAL_SKILLS_DIR);
+
+  const bare = tmpRepo();
+  fs.mkdirSync(path.join(bare, "skills"));
+  fs.mkdirSync(path.join(bare, "docs"));
+  assert.equal(resolveOverflowTarget(bare, "skills").dir, "skills");
+  assert.equal(resolveOverflowTarget(bare, "nope/skills").dir, CANONICAL_SKILLS_DIR);
+
+  fs.mkdirSync(path.join(bare, ".claude", "skills"), { recursive: true });
+  assert.deepEqual(resolveOverflowTarget(bare, ".claude/skills"), {
+    kind: "skills",
+    dir: ".claude/skills",
+    warnings: [],
+  });
+  assert.equal(resolveOverflowTarget(bare, ".claude/skills/").dir, ".claude/skills");
+  assert.equal(resolveOverflowTarget(bare, ".claude\\skills\\").dir, ".claude/skills");
+});
+
+test("configured skills directories cannot escape the repository", () => {
+  const root = tmpRepo();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "backpass-outside-skills-"));
+  fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
+  fs.symlinkSync(outside, path.join(root, ".claude", "skills"), "dir");
+
+  for (const skillsDir of [path.relative(root, outside), ".claude/skills"]) {
+    assert.throws(() => resolveOverflowTarget(root, skillsDir), UserError);
+  }
+});
+
+test("user skill discovery uses only configured harness roots", () => {
+  const root = tmpRepo();
+  const relocated = path.join(root, "claude-config", "skills");
+  const stale = path.join(root, CLAUDE_SKILLS_LINK, "stale", "SKILL.md");
+  const active = path.join(relocated, "active", "SKILL.md");
+  fs.mkdirSync(path.dirname(stale), { recursive: true });
+  fs.mkdirSync(path.dirname(active), { recursive: true });
+  fs.writeFileSync(stale, "---\nname: stale\ndescription: stale trigger\n---\n\nbody\n");
+  fs.writeFileSync(active, "---\nname: active\ndescription: active trigger\n---\n\nbody\n");
+
+  assert.deepEqual(
+    loadProjectSkills(root, CANONICAL_SKILLS_DIR, [CANONICAL_SKILLS_DIR, relocated], { exact: true }).map(
+      (skill) => skill.name,
+    ),
+    ["active"],
+  );
+});
+
+test("a skill in an outside search path counts as existing, and never becomes the write target", () => {
+  const root = tmpRepo();
+  // The canonical library is a shared tree living outside the repo (e.g. ~/.claude/skills).
+  const shared = fs.mkdtempSync(path.join(os.tmpdir(), "backpass-shared-skills-"));
+  const shSkill = path.join(shared, "xsearch-percall-row-ceiling", "SKILL.md");
+  fs.mkdirSync(path.dirname(shSkill), { recursive: true });
+  fs.writeFileSync(shSkill, "---\nname: xsearch-percall-row-ceiling\ndescription: cap rows per call\n---\n\nbody\n");
+
+  // Awareness: an AGENTS.md pointer to this skill resolves through the search path, so it
+  // is not dangling and backpass must not propose re-creating it in the repo.
+  const aware = loadProjectSkills(root, CANONICAL_SKILLS_DIR, [shared]);
+  assert.deepEqual(
+    aware.map((skill) => skill.name),
+    ["xsearch-percall-row-ceiling"],
+  );
+  assert.ok(path.isAbsolute(aware[0].path), "an outside skill keeps its absolute path");
+
+  // Read-only: the overflow write target is always the repo's own skillsDir, never a
+  // search path, whatever the search paths contain.
+  assert.equal(resolveOverflowTarget(root, CANONICAL_SKILLS_DIR).dir, CANONICAL_SKILLS_DIR);
+});
+
+test("project skill discovery includes separate canonical and Claude roots without double-counting symlinks", () => {
+  const root = tmpRepo();
+  const canonical = path.join(root, CANONICAL_SKILLS_DIR, "generated", "SKILL.md");
+  const claude = path.join(root, CLAUDE_SKILLS_LINK, "hand-written", "SKILL.md");
+  fs.mkdirSync(path.dirname(canonical), { recursive: true });
+  fs.mkdirSync(path.dirname(claude), { recursive: true });
+  fs.writeFileSync(canonical, "---\nname: generated\ndescription: generated trigger\n---\n\nbody\n");
+  fs.writeFileSync(claude, "---\nname: hand-written\ndescription: human trigger\n---\n\nbody\n");
+
+  assert.deepEqual(
+    loadProjectSkills(root).map((skill) => skill.path),
+    [".agents/skills/generated/SKILL.md", ".claude/skills/hand-written/SKILL.md"],
+  );
+
+  fs.rmSync(path.join(root, CLAUDE_SKILLS_LINK), { recursive: true });
+  fs.symlinkSync(CLAUDE_SKILLS_LINK_TARGET, path.join(root, CLAUDE_SKILLS_LINK), "dir");
+  assert.deepEqual(
+    loadProjectSkills(root).map((skill) => skill.name),
+    ["generated"],
+  );
+});
+
+test("analysis lists a shared user skill once while billing every harness copy", (t) => {
+  const root = tmpRepo();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const dirs = [".agents/skills", ".claude/skills", ".codex/skills"];
+  const file = path.join(root, dirs[0], "release-signing", "SKILL.md");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, renderSkillFile(SKILL));
+  for (const dir of dirs.slice(1)) {
+    fs.mkdirSync(path.join(root, dir), { recursive: true });
+    fs.symlinkSync(path.dirname(file), path.join(root, dir, "release-signing"), "dir");
+  }
+
+  const skills = loadProjectSkills(root, dirs[0], dirs, { exact: true });
+  const before = structuredClone(skills);
+  assert.equal(skills.length, 3);
+  assert.equal(loadedCopies(root, skills, file), 3);
+  assert.equal(skillDescriptionTokens(skills), 3 * skills[0].descriptionTokens);
+  const expected = `- ${skills[0].name} (${skills[0].path}) :: ${skills[0].description}`;
+  assert.equal(renderSkillIndexForAnalysis(skills, root), expected);
+  assert.equal(
+    renderSkillIndexForAnalysis(skills.map((skill) => ({ ...skill, path: path.join(root, skill.path) }))),
+    `- ${skills[0].name} (${path.join(root, skills[0].path)}) :: ${skills[0].description}`,
+  );
+  assert.deepEqual(skills, before, "rendering must not dedupe the accounting input");
+  assert.equal(loadedCopies(root, skills, file), 3);
+  assert.equal(skillDescriptionTokens(skills), 3 * skills[0].descriptionTokens);
+});
+
+test("analysis retains distinct files with identical names and descriptions", (t) => {
+  const root = tmpRepo();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const dirs = [".agents/skills", ".claude/skills"];
+  for (const dir of dirs) {
+    const file = path.join(root, dir, "release-signing", "SKILL.md");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, renderSkillFile(SKILL));
+  }
+  const skills = loadProjectSkills(root);
+  assert.equal(skills.length, 2);
+  assert.equal(renderSkillIndexForAnalysis(skills, root).split("\n").length, 2);
+  for (const skill of skills) assert.ok(renderSkillIndexForAnalysis(skills, root).includes(skill.path));
+});
+
+test("analysis preserves unresolved skill paths and the empty-index message", () => {
+  const skills = ["missing-one/SKILL.md", "missing-two/SKILL.md"].map((file) => ({
+    name: "missing",
+    path: file,
+    description: "",
+  }));
+  assert.equal(renderSkillIndexForAnalysis([]), "(this repo has no skills)");
+  assert.equal(
+    renderSkillIndexForAnalysis(skills),
+    "- missing (missing-one/SKILL.md) :: (no description)\n- missing (missing-two/SKILL.md) :: (no description)",
+  );
+});
+
+test("ensureSkillsLayout creates the dir and symlink when none exists and is idempotent", () => {
+  const root = tmpRepo();
+  const first = ensureSkillsLayout(root);
+  assert.ok(fs.statSync(path.join(root, CANONICAL_SKILLS_DIR)).isDirectory());
+  assert.equal(fs.readlinkSync(path.join(root, CLAUDE_SKILLS_LINK)), CLAUDE_SKILLS_LINK_TARGET);
+  assert.equal(first.created.length, 2);
+  assert.deepEqual(ensureSkillsLayout(root), { created: [], warnings: [] });
+});
+
+test("an existing .claude/skills symlink is left alone even if it points elsewhere", () => {
+  const root = tmpRepo();
+  fs.mkdirSync(path.join(root, ".claude"));
+  fs.mkdirSync(path.join(root, "custom-skills"));
+  fs.symlinkSync("../custom-skills", path.join(root, CLAUDE_SKILLS_LINK), "dir");
+  const result = ensureSkillsLayout(root);
+  assert.equal(fs.readlinkSync(path.join(root, CLAUDE_SKILLS_LINK)), "../custom-skills");
+  assert.deepEqual(result.created, [CANONICAL_SKILLS_DIR]);
+  assert.deepEqual(result.warnings, []);
+});
+
+test("a real .claude/skills directory is warned about and never clobbered", () => {
+  const root = tmpRepo();
+  const existing = path.join(root, CLAUDE_SKILLS_LINK, "hand-written", "SKILL.md");
+  fs.mkdirSync(path.dirname(existing), { recursive: true });
+  fs.writeFileSync(existing, "---\nname: hand-written\ndescription: keep me\n---\n\nbody\n");
+
+  const resolved = resolveOverflowTarget(root);
+  assert.equal(resolved.dir, CANONICAL_SKILLS_DIR);
+  assert.equal(resolved.warnings.length, 1);
+  assert.match(resolved.warnings[0], /\.claude\/skills is a real directory/);
+  assert.match(resolved.warnings[0], /--skills-dir '\.claude\/skills'/);
+  assert.match(resolved.warnings[0], /"skillsDir": "\.claude\/skills"/);
+  assert.match(resolved.warnings[0], /"user" block in \$XDG_CONFIG_HOME\/backpass\/config\.json/);
+  assert.match(resolved.warnings[0], /merge new skill directories manually/);
+  assert.doesNotMatch(resolved.warnings[0], /ln -s|replace it/);
+
+  const result = writeSkill(root, SKILL);
+  assert.equal(result.warnings.length, 1);
+  assert.match(result.warnings[0], /left untouched/);
+  assert.ok(fs.lstatSync(path.join(root, CLAUDE_SKILLS_LINK)).isDirectory());
+  assert.ok(!fs.lstatSync(path.join(root, CLAUDE_SKILLS_LINK)).isSymbolicLink());
+  assert.equal(fs.readFileSync(existing, "utf8").includes("keep me"), true);
+  assert.ok(!fs.existsSync(path.join(root, CLAUDE_SKILLS_LINK, "release-signing")));
+  assert.ok(fs.existsSync(path.join(root, CANONICAL_SKILLS_DIR, "release-signing", "SKILL.md")));
+});
+
+test("quotes spaces in the one-run skills directory guidance", () => {
+  const root = tmpRepo();
+  const claudeSkillsDir = ".claude config/skills";
+  fs.mkdirSync(path.join(root, claudeSkillsDir), { recursive: true });
+
+  const resolved = resolveOverflowTarget(root, CANONICAL_SKILLS_DIR, { claudeSkillsDir });
+
+  assert.equal(resolved.warnings.length, 1);
+  assert.match(resolved.warnings[0], /--skills-dir '\.claude config\/skills'/);
+  assert.match(resolved.warnings[0], /project scope/);
+  assert.match(resolved.warnings[0], /user.*scope/);
+  assert.match(resolved.warnings[0], /merge new skill directories manually after checking for conflicts/);
+  assert.doesNotMatch(resolved.warnings[0], /ln -s|replace it/);
+});
+
+test("applyDecisions writes accepted extractions through the skills layout and surfaces warnings", () => {
+  const root = tmpRepo();
+  fs.writeFileSync(path.join(root, "AGENTS.md"), "# Memory\n\n- Sign releases with the key.\n");
+  const edit = {
+    id: "e1",
+    kind: "extract",
+    file: "AGENTS.md",
+    find: "- Sign releases with the key.",
+    replace: "- Release signing: see the release-signing skill.",
+    skill: SKILL,
+  };
+  const proposal = { memoryFile: { path: "AGENTS.md" }, edits: [edit] };
+  const state = { readRejections: () => [], writeRejections: () => {} };
+
+  const dry = applyDecisions({
+    proposal,
+    decisions: { e1: "accepted" },
+    repo: { root },
+    state,
+    config: { budgetTokens: 5000 },
+    dryRun: true,
+  });
+  assert.ok(!fs.existsSync(path.join(root, CANONICAL_SKILLS_DIR)));
+  assert.deepEqual(dry.skills, [{ path: SKILL.path, dryRun: true, created: [] }]);
+
+  const results = applyDecisions({
+    proposal,
+    decisions: { e1: "accepted" },
+    repo: { root },
+    state,
+    config: { budgetTokens: 5000 },
+  });
+  assert.equal(results.failed.length, 0);
+  assert.deepEqual(results.warnings, []);
+  assert.deepEqual(results.skills[0].created, [
+    CANONICAL_SKILLS_DIR,
+    `${CLAUDE_SKILLS_LINK} -> ${CLAUDE_SKILLS_LINK_TARGET}`,
+  ]);
+  assert.ok(fs.existsSync(path.join(root, CLAUDE_SKILLS_LINK, "release-signing", "SKILL.md")));
+});
+
+test("user apply links relocated Claude skills without relying on directory order", () => {
+  const root = tmpRepo();
+  const claudeRoot = path.join(root, "claude-config");
+  const relocated = path.join(claudeRoot, "skills");
+  const previous = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = claudeRoot;
+  try {
+    fs.writeFileSync(path.join(root, "AGENTS.md"), "# Memory\n\n- Sign releases with the key.\n");
+    const edit = {
+      id: "e1",
+      kind: "extract",
+      file: "AGENTS.md",
+      find: "- Sign releases with the key.",
+      replace: "- Release signing: see the release-signing skill.",
+      skill: SKILL,
+    };
+    const skillsDirs = [path.join(root, "custom-skills"), path.join(root, ".codex", "skills"), CANONICAL_SKILLS_DIR];
+    const results = applyDecisions({
+      proposal: {
+        scope: "user",
+        memoryFile: { path: "AGENTS.md" },
+        edits: [edit],
+        config: { skillsDirs },
+      },
+      decisions: { e1: "accepted" },
+      repo: { root },
+      state: { readRejections: () => [], writeRejections: () => {} },
+      config: { budgetTokens: 5000, skillsDirs },
+    });
+
+    assert.equal(results.failed.length, 0);
+    assert.ok(fs.lstatSync(relocated).isSymbolicLink());
+    assert.equal(fs.realpathSync(relocated), fs.realpathSync(path.join(root, CANONICAL_SKILLS_DIR)));
+    assert.ok(fs.existsSync(path.join(relocated, "release-signing", "SKILL.md")));
+    assert.equal(fs.existsSync(path.join(root, CLAUDE_SKILLS_LINK)), false);
+    assert.equal(fs.existsSync(path.join(root, ".codex", "skills")), false);
+  } finally {
+    if (previous === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = previous;
+  }
+});
+
+test("a skill symlinked into the loaded directory is read, because that is what a harness loads", () => {
+  const root = tmpRepo();
+  const library = path.join(root, "library");
+  const loaded = path.join(root, ".claude", "skills");
+  fs.mkdirSync(path.join(library, "beads"), { recursive: true });
+  fs.mkdirSync(loaded, { recursive: true });
+  fs.writeFileSync(
+    path.join(library, "beads", "SKILL.md"),
+    "---\nname: beads\ndescription: Use when tracking project work.\n---\n\n# Beads\n\nTrack work here.\n",
+  );
+  fs.writeFileSync(path.join(library, "solo.md"), "---\nname: solo\ndescription: A single-file skill.\n---\n\nBody.\n");
+  // How the user's machine is laid out: the library holds the content, the harness-loaded
+  // directory holds symlinks into it.
+  fs.symlinkSync(path.join(library, "beads"), path.join(loaded, "beads"));
+  fs.symlinkSync(path.join(library, "solo.md"), path.join(loaded, "solo.md"));
+  fs.symlinkSync(path.join(library, "missing"), path.join(loaded, "broken"));
+
+  const names = loadSkills(root, ".claude/skills").map((s) => s.name);
+  assert.deepEqual(names, ["beads", "solo"], "symlinked skills count; a broken symlink is skipped");
+
+  const beads = loadSkills(root, ".claude/skills").find((s) => s.name === "beads");
+  assert.match(beads.description, /tracking project work/);
+  assert.ok(beads.descriptionTokens > 0, "a symlinked skill's description is billed like any other");
+});

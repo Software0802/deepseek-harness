@@ -1,0 +1,776 @@
+import fs from "node:fs";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+
+import { applyEdit, filesOfEdit, sliceEditForFile } from "../proposal.js";
+import { memoryTextHash, readOnlyResolvedPath, resolveMemoryPath } from "../memory.js";
+import { userClaudeSkillsDir } from "../config.js";
+import { budgetGateKind, budgetStatus, estimateTokens, formatTokens } from "../tokens.js";
+import { recordRejection } from "../state.js";
+import { nestedBudget } from "../nested.js";
+import {
+  CANONICAL_SKILLS_DIR,
+  CLAUDE_SKILLS_LINK,
+  editSkills,
+  ensureSkillsLayout,
+  loadProjectSkills,
+  loadedCopies,
+  logicalSkillDir,
+  parseFrontmatter,
+  removeOwnedSkillPaths,
+  resolveOverflowTarget,
+  skillDescriptionTokens,
+  writeSkill,
+} from "../skills.js";
+
+/**
+ * The always-loaded label a budget number carries: the surface when skill descriptions
+ * are part of the count, the bare file when there are none - a number shown to a person
+ * must describe the thing it measures.
+ */
+function resolveTarget(root, relative) {
+  if (!relative) return relative;
+  return path.isAbsolute(relative) ? relative : path.join(root, relative);
+}
+
+/** Named refusal when a target is a symlink into a read-only store. */
+export function readOnlySymlinkMessage(absolute, realPath) {
+  return `${absolute} is a symlink to ${realPath}, which is not writable; edit the source that generates it`;
+}
+
+/** The same refusal when a directory on the way to the target is the link, not the target. */
+export function readOnlyTargetMessage(absolute, realPath) {
+  return `${absolute} resolves to ${realPath}, which is not writable; edit the source that generates it`;
+}
+
+/**
+ * The link is as often a directory on the way to the file (`~/.claude/skills/foo` pointing
+ * into a nix store) as the file itself, so the whole path is resolved rather than the leaf
+ * lstat'd: an lstat of the leaf sees a plain file and hands the user a raw EROFS instead.
+ */
+function refuseReadOnlySymlink(absolute) {
+  const real = readOnlyResolvedPath(absolute);
+  if (!real) return null;
+  return isSymbolicLink(absolute) ? readOnlySymlinkMessage(absolute, real) : readOnlyTargetMessage(absolute, real);
+}
+
+function isSymbolicLink(absolute) {
+  try {
+    return fs.lstatSync(absolute).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+function surfaceLabel(memoryPath, descriptionTokens) {
+  return descriptionTokens ? `the always-loaded surface (${memoryPath} + skill descriptions)` : memoryPath;
+}
+
+function descriptionTokensIn(text) {
+  return estimateTokens(parseFrontmatter(text).description || "");
+}
+
+function acceptedSubsetBudgetFailure({
+  proposal,
+  capTokens,
+  memoryText,
+  projectedMemoryText,
+  descriptionTokensNow,
+  descriptionTokensProjected,
+}) {
+  const relative = proposal.memoryFile.path;
+  if (memoryText === null) return null;
+
+  const budget = budgetStatus(memoryText, projectedMemoryText, capTokens, {
+    current: descriptionTokensNow,
+    projected: descriptionTokensProjected,
+  });
+  const label = surfaceLabel(relative, Math.max(descriptionTokensNow, descriptionTokensProjected));
+  const gate = budgetGateKind(budget);
+  if (gate === "cap") {
+    return {
+      file: relative,
+      error:
+        `accepted edits leave ${label} at ${budget.projected} tokens, ${budget.over} over the ` +
+        `${capTokens}-token budget; choose a compatible set of edits`,
+    };
+  }
+  if (gate === "shrink") {
+    return {
+      file: relative,
+      error:
+        `${label} is already ${budget.current - capTokens} tokens over the ${capTokens}-token budget, ` +
+        `so accepted edits must shrink it, but they change it by ${budget.delta >= 0 ? "+" : ""}${budget.delta} ` +
+        "tokens; choose a compatible set of edits",
+    };
+  }
+  return null;
+}
+
+/**
+ * Freshness before mutation.
+ *
+ * Every hunk was cut from one exact image of the memory file, and the proposal records
+ * that image's hash. If the file has disappeared or changed since - an upstream merge,
+ * a hand edit, another agent - then the hunks describe text that may no longer exist, and the ones
+ * that still happen to match would leave the file half-descended: part of a shrink plan
+ * applied against a file the plan was never measured against. So the run is refused
+ * before it writes anything, and the fix is to re-measure, not to salvage.
+ *
+ * A proposal saved before this field existed carries no hash and is left alone.
+ */
+function memoryFileSnapshot(proposal, repo) {
+  const expected = proposal.memoryFile?.hash;
+  const relative = proposal.memoryFile?.path;
+  if (!relative) return { text: null };
+
+  const absolute = resolveTarget(repo.root, relative);
+  const blocked = refuseReadOnlySymlink(absolute);
+  if (blocked) {
+    return { text: null, failure: { file: relative, error: blocked } };
+  }
+  if (!fs.existsSync(absolute)) {
+    if (!expected) return { text: null };
+    return {
+      text: null,
+      failure: {
+        file: relative,
+        error:
+          `${relative} no longer exists, so its edits no longer describe the file on disk; nothing was written. ` +
+          `Run \`backpass\` to re-propose against the current repository - that pass reanalyzes transcripts ` +
+          `against the file that exists now, it does not reuse the judgments behind this proposal.`,
+      },
+    };
+  }
+
+  const text = fs.readFileSync(absolute, "utf8");
+  if (!expected) return { text };
+
+  const observed = memoryTextHash(text);
+  if (observed === expected) return { text };
+
+  return {
+    text,
+    failure: {
+      file: relative,
+      error:
+        `${relative} changed after this proposal was made (${expected} -> ${observed}), so its edits ` +
+        `no longer describe the file on disk; nothing was written. Run \`backpass\` to re-propose ` +
+        `against the current ${relative} - that pass reanalyzes transcripts against the new file, it does ` +
+        `not reuse the stale judgments behind this proposal.`,
+    },
+  };
+}
+
+function overBudgetWarning(label, budget) {
+  return (
+    `${label} is still ${formatTokens(budget.over)} tokens over the ${formatTokens(budget.capTokens)}-token ` +
+    "budget; run `backpass` again for the next shrink step"
+  );
+}
+
+/**
+ * Budgets the proposal was made under that the current config no longer names.
+ *
+ * Synthesis measured and gated every file against the cap in force then, recorded as
+ * `budget.capTokens` (root) and `nested[].budget.capTokens`; gating the accepted subset
+ * against a different number would compare two measurements and either refuse sound
+ * additions or skip the zero-sum the proposal was held to. So apply refuses, naming both
+ * numbers, rather than pick one. Only files `edits` land in are checked, and a proposal
+ * that recorded no cap is left to the current config.
+ *
+ * @returns {{ file: string, proposed: number, current: number, remedy: string }[]}
+ */
+export function budgetMismatches(proposal, config, edits = proposal.edits) {
+  const mismatches = [];
+  const rootCap = proposal.budget?.capTokens;
+  if (edits.some((edit) => !edit.nestedMemoryFile) && Number.isFinite(rootCap) && rootCap !== config.budgetTokens) {
+    mismatches.push({
+      file: proposal.memoryFile.path,
+      proposed: rootCap,
+      current: config.budgetTokens,
+      remedy: `--budget ${rootCap}`,
+    });
+  }
+  const nestedCap = nestedBudget(config);
+  for (const nested of proposal.nested || []) {
+    const cap = nested.budget?.capTokens;
+    if (!edits.some((edit) => edit.nestedMemoryFile === nested.memoryFile.path)) continue;
+    if (!Number.isFinite(cap) || cap === nestedCap) continue;
+    mismatches.push({
+      file: nested.memoryFile.path,
+      proposed: cap,
+      current: nestedCap,
+      remedy: config.nestedBudgetTokens == null ? `--budget ${cap}` : `nestedBudgetTokens set to ${cap}`,
+    });
+  }
+  return mismatches;
+}
+
+/** One mismatch, named with both numbers. */
+export function budgetMismatchMessage({ file, proposed, current }) {
+  return (
+    `this proposal was made under a ${formatTokens(proposed)}-token budget for ${file}; ` +
+    `the current config says ${formatTokens(current)}`
+  );
+}
+
+/** How to apply under the proposal's own budgets, or propose under the current ones. */
+export function budgetMismatchHint(mismatches) {
+  const remedies = [...new Set(mismatches.map((m) => m.remedy))];
+  return `re-run apply with ${remedies.join(" and ")}, or run \`backpass\` again to propose under the current budget`;
+}
+
+function atomicReplace(target, text) {
+  const temp = path.join(path.dirname(target), `.${path.basename(target)}.backpass-${randomUUID()}`);
+  const mode = fs.statSync(target).mode & 0o7777;
+  let fd;
+  let ownership;
+  try {
+    fd = fs.openSync(temp, "wx");
+    const stat = fs.fstatSync(fd);
+    ownership = [{ absolute: temp, identity: { dev: stat.dev, ino: stat.ino } }];
+    fs.fchmodSync(fd, mode);
+    fs.writeFileSync(fd, text);
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = undefined;
+    fs.renameSync(temp, target);
+    return { absolute: target, identity: ownership[0].identity, text };
+  } catch (err) {
+    if (fd !== undefined) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // Preserve the original write error.
+      }
+    }
+    removeOwnedSkillPaths(ownership ?? []);
+    throw err;
+  }
+}
+
+function commitStillCurrent(commit) {
+  let stat;
+  try {
+    stat = fs.lstatSync(commit.absolute);
+    if (stat.dev !== commit.identity.dev || stat.ino !== commit.identity.ino) return false;
+    return fs.readFileSync(commit.absolute, "utf8") === commit.text;
+  } catch {
+    return false;
+  }
+}
+
+function absentParentDirectories(root, files) {
+  const directories = new Set();
+  for (const file of files) {
+    for (
+      let current = path.dirname(file);
+      current !== root && path.dirname(current) !== current;
+      current = path.dirname(current)
+    ) {
+      if (!fs.existsSync(current)) directories.add(current);
+    }
+  }
+  return [...directories].sort((a, b) => b.length - a.length);
+}
+
+function removeEmptyDirectories(directories) {
+  for (const directory of directories) {
+    try {
+      fs.rmdirSync(directory);
+    } catch {
+      continue;
+    }
+  }
+}
+
+/**
+ * The only place in backpass that writes to the repo.
+ *
+ * Everything upstream is read-only analysis; a run only changes the weights here, after
+ * explicit per-edit decisions arrive through `cmdApply` (see `../commands/apply.js`).
+ * Before the first byte is written, every file an accepted edit lands in must still have
+ * the budget the proposal was made under (`budgetMismatches`), the memory file and
+ * every decided non-memory target must still be the files the proposal measured; the
+ * accepted subset must clear the same cap/shrink budget gate as the full proposal
+ * (`budgetGateKind`); every accepted edit for a file must compose against that file's
+ * single pre-write image; every created skill target must still be absent; and accepted
+ * paths must resolve to distinct targets. Any failure writes nothing and records no rejection.
+ *
+ * A file is therefore applied all at once or not at all. Skills are written only after
+ * every accepted edit has composed, and before the files that reference them.
+ */
+export function applyDecisions({
+  proposal,
+  decisions,
+  repo,
+  state,
+  config,
+  dryRun = false,
+  rejectReasons = {},
+  appliedBy = null,
+}) {
+  const accepted = proposal.edits.filter((e) => decisions[e.id] === "accepted");
+  const rejected = proposal.edits.filter((e) => decisions[e.id] === "rejected");
+
+  const byFile = new Map();
+  const results = {
+    written: [],
+    skills: [],
+    failed: [],
+    warnings: [],
+    accepted: accepted.length,
+    rejected: rejected.length,
+    rejectionsRecorded: false,
+  };
+
+  // Before anything is read: an accepted subset gated against a cap the proposal was
+  // not made under compares two different measurements (`budgetMismatches`).
+  const mismatches = budgetMismatches(proposal, config, accepted);
+  if (mismatches.length) {
+    const hint = budgetMismatchHint(mismatches);
+    for (const mismatch of mismatches) {
+      results.failed.push({ file: mismatch.file, error: `${budgetMismatchMessage(mismatch)}; ${hint}` });
+    }
+    return results;
+  }
+
+  if ((proposal.scope || "project") === "project") {
+    const targets = new Set([
+      proposal.memoryFile?.path,
+      ...[...accepted, ...rejected].flatMap((edit) => filesOfEdit(edit)),
+      ...accepted.flatMap((edit) => editSkills(edit).map((skill) => skill.path)),
+    ]);
+    try {
+      for (const target of targets) if (target) resolveMemoryPath(repo.root, target);
+    } catch (err) {
+      results.failed.push({ error: err.message });
+      return results;
+    }
+  }
+
+  let memoryText = null;
+  if (accepted.length || rejected.length) {
+    const snapshot = memoryFileSnapshot(proposal, repo);
+    if (snapshot.failure) {
+      results.failed.push(snapshot.failure);
+      return results;
+    }
+    memoryText = snapshot.text;
+  }
+
+  // The always-loaded skill layer as it exists on disk right now - the budget below
+  // covers the whole surface, not the memory file alone.
+  const userScope = proposal.scope === "user";
+  const claudeSkillsLink = userScope ? userClaudeSkillsDir() : CLAUDE_SKILLS_LINK;
+  const skillsDir = resolveOverflowTarget(
+    repo.root,
+    proposal.config?.skillsDir || config.skillsDir || CANONICAL_SKILLS_DIR,
+    { claudeSkillsDir: claudeSkillsLink, allowExternal: userScope },
+  ).dir;
+  const configuredSkillDirs = proposal.config?.skillsDirs || proposal.config?.skillDirs || config.skillsDirs || [];
+  const skillsNow = loadProjectSkills(repo.root, skillsDir, configuredSkillDirs, { exact: userScope });
+  const descriptionTokensNow = skillDescriptionTokens(skillsNow);
+
+  // Freshness for every non-memory file a decision targets, the same contract the
+  // memory file gets: each hunk was cut from one exact image, and a file that changed
+  // since no longer contains what the proposal describes - refuse, never patch blind.
+  // Proposals from before the field existed carry no hashes and are left alone.
+  const expectedTargetHashes = new Map((proposal.targetFiles ?? []).map((t) => [t.file, t.hash]));
+  const checkedTargets = new Set();
+  for (const edit of [...accepted, ...rejected]) {
+    for (const relative of filesOfEdit(edit)) {
+      if (!relative || relative === proposal.memoryFile?.path || checkedTargets.has(relative)) continue;
+      checkedTargets.add(relative);
+      const expected = expectedTargetHashes.get(relative);
+      if (!expected) continue;
+      const absolute = resolveTarget(repo.root, relative);
+      const blocked = refuseReadOnlySymlink(absolute);
+      if (blocked) {
+        results.failed.push({ file: relative, error: blocked });
+        continue;
+      }
+      if (!fs.existsSync(absolute)) {
+        results.failed.push({ file: relative, error: "file does not exist" });
+        continue;
+      }
+      const observed = memoryTextHash(fs.readFileSync(absolute, "utf8"));
+      if (observed !== expected) {
+        results.failed.push({
+          file: relative,
+          error:
+            `${relative} changed after this proposal was made (${expected} -> ${observed}), so its edits ` +
+            `no longer describe the file on disk; nothing was written. Run \`backpass\` to re-propose ` +
+            `against the current repository.`,
+        });
+      }
+    }
+  }
+  if (results.failed.length) return results;
+
+  for (const edit of accepted) {
+    for (const relative of filesOfEdit(edit)) {
+      const slice = sliceEditForFile(edit, relative);
+      if (!slice) continue;
+      if (!byFile.has(relative)) byFile.set(relative, []);
+      byFile.get(relative).push(slice);
+    }
+  }
+
+  // Compose first, write later. Each file's accepted edits are applied to one immutable
+  // image of that file; only a set that composes completely earns a write.
+  const planned = [];
+  const landed = new Set();
+
+  for (const [relative, edits] of byFile) {
+    const absolute = resolveTarget(repo.root, relative);
+    if (!fs.existsSync(absolute)) {
+      results.failed.push({ file: relative, error: "file does not exist" });
+      continue;
+    }
+    const blocked = refuseReadOnlySymlink(absolute);
+    if (blocked) {
+      results.failed.push({ file: relative, error: blocked });
+      continue;
+    }
+
+    const before =
+      relative === proposal.memoryFile?.path && memoryText !== null ? memoryText : fs.readFileSync(absolute, "utf8");
+    let text = before;
+    const applied = [];
+    const failures = [];
+
+    for (const edit of edits) {
+      try {
+        text = applyEdit(text, edit);
+        applied.push(edit.id);
+      } catch (err) {
+        failures.push({ file: relative, edit: edit.id, error: err.message });
+      }
+    }
+
+    if (failures.length) {
+      results.failed.push(...failures);
+      if (applied.length) {
+        results.failed.push({
+          file: relative,
+          error: `${relative} was left unchanged: a file takes every accepted edit or none of them`,
+        });
+      }
+      continue;
+    }
+
+    if (text === before) continue;
+    planned.push({ relative, absolute, before, text, applied });
+    for (const id of applied) landed.add(id);
+  }
+
+  const plannedTargets = new Map();
+  const resolvedPlanned = [];
+  for (const item of planned) {
+    let resolved;
+    try {
+      resolved = fs.realpathSync(item.absolute);
+    } catch (err) {
+      results.failed.push({ file: item.relative, error: `${item.relative} could not be resolved: ${err.message}` });
+      continue;
+    }
+    const existing = plannedTargets.get(resolved);
+    if (existing) {
+      results.failed.push({
+        file: item.relative,
+        error: `${item.relative} resolves to the same target as ${existing.relative}; nothing was written`,
+      });
+      continue;
+    }
+    const resolvedItem = { ...item, resolved };
+    plannedTargets.set(resolved, resolvedItem);
+    resolvedPlanned.push(resolvedItem);
+  }
+
+  if (results.failed.length) return results;
+
+  // Skills go in before the memory file. A skill nothing points at yet is inert, while a
+  // memory file pointing at a skill that is not there is actively wrong - so if a skill
+  // cannot be written, the files that would reference it are left alone.
+  const plannedSkills = [];
+  const skillPaths = new Set();
+  for (const edit of accepted) {
+    if (edit.kind !== "extract" || !landed.has(edit.id)) continue;
+    for (const skill of editSkills(edit)) {
+      const absolute = resolveTarget(repo.root, skill.path);
+      if (skillPaths.has(skill.path) || fs.existsSync(absolute)) {
+        results.failed.push({
+          file: skill.path,
+          edit: edit.id,
+          error: `${skill.path} already exists; nothing was written`,
+        });
+      }
+      skillPaths.add(skill.path);
+      plannedSkills.push({ edit, skill });
+    }
+  }
+  if (results.failed.length) return results;
+
+  // Skill paths were frozen into the proposal at propose time under whatever skillsDir
+  // was configured then; writing them now under a different one would silently ignore
+  // the current run's --skills-dir instead of writing where it says. Refuse rather than
+  // remap - a later apply should re-propose against the new location.
+  const proposedSkillsDir = proposal.config?.skillsDir;
+  const currentSkillsDir = config.skillsDir || CANONICAL_SKILLS_DIR;
+  const skillsDirMismatch =
+    proposedSkillsDir && logicalSkillDir(repo.root, proposedSkillsDir) !== logicalSkillDir(repo.root, currentSkillsDir);
+  if (plannedSkills.length && skillsDirMismatch) {
+    results.failed.push({
+      error:
+        `this proposal was generated with skillsDir=${proposedSkillsDir}; the current run is configured ` +
+        `with skillsDir=${currentSkillsDir} - re-run \`backpass propose\` with the new skillsDir, or apply ` +
+        "without overriding it",
+    });
+    return results;
+  }
+
+  const existingSkillPaths = new Set(skillsNow.map((skill) => skill.path));
+  let descriptionTokensProjected = descriptionTokensNow;
+  for (const item of resolvedPlanned) {
+    if (!existingSkillPaths.has(item.relative)) continue;
+    descriptionTokensProjected +=
+      (descriptionTokensIn(item.text) - descriptionTokensIn(item.before)) *
+      loadedCopies(repo.root, skillsNow, item.relative);
+  }
+  descriptionTokensProjected += plannedSkills.reduce(
+    (sum, { skill }) => sum + estimateTokens(skill.description || ""),
+    0,
+  );
+  const memoryPlan = resolvedPlanned.find((item) => item.relative === proposal.memoryFile.path);
+  if (memoryPlan || plannedSkills.length || resolvedPlanned.some((item) => existingSkillPaths.has(item.relative))) {
+    const budgetFailure = acceptedSubsetBudgetFailure({
+      proposal,
+      capTokens: config.budgetTokens,
+      memoryText,
+      projectedMemoryText: memoryPlan?.text ?? memoryText,
+      descriptionTokensNow,
+      descriptionTokensProjected,
+    });
+    if (budgetFailure) {
+      results.failed.push(budgetFailure);
+      return results;
+    }
+  }
+  // A nested memory file is a weight of its own with a budget of its own: the accepted
+  // subset that lands in it clears the same cap/shrink gate the root surface does.
+  const nestedBudgets = new Map();
+  for (const nested of proposal.nested || []) {
+    const plan = resolvedPlanned.find((item) => item.relative === nested.memoryFile.path);
+    if (!plan) continue;
+    if (!config.nestedMemoryFiles?.includes(plan.relative)) {
+      results.failed.push({
+        file: plan.relative,
+        error: `${plan.relative} is no longer named in nestedMemoryFiles; re-run \`backpass propose\` with the current scope`,
+      });
+      continue;
+    }
+    const capTokens = nestedBudget(config);
+    const budget = budgetStatus(plan.before, plan.text, capTokens);
+    const gate = budgetGateKind(budget);
+    if (gate === "cap") {
+      results.failed.push({
+        file: plan.relative,
+        error:
+          `accepted edits leave ${plan.relative} at ${budget.projected} tokens, ${budget.over} over its ` +
+          `${capTokens}-token budget; choose a compatible set of edits`,
+      });
+    } else if (gate === "shrink") {
+      results.failed.push({
+        file: plan.relative,
+        error:
+          `${plan.relative} is already ${budget.current - capTokens} tokens over its ${capTokens}-token budget, ` +
+          `so accepted edits must shrink it, but they change it by ${budget.delta >= 0 ? "+" : ""}${budget.delta} ` +
+          "tokens; choose a compatible set of edits",
+      });
+    }
+    nestedBudgets.set(plan.relative, budget);
+  }
+  if (results.failed.length) return results;
+
+  const canonical = plannedSkills.find(
+    ({ skill }) => skill.path === CANONICAL_SKILLS_DIR || skill.path.startsWith(`${CANONICAL_SKILLS_DIR}/`),
+  );
+  const createdDirectoryCandidates = absentParentDirectories(repo.root, [
+    ...plannedSkills.map(({ skill }) => resolveTarget(repo.root, skill.path)),
+    ...(canonical ? [resolveTarget(repo.root, claudeSkillsLink)] : []),
+  ]);
+  const skillFailures = [];
+  const ownedSkillPaths = [];
+  for (const { edit, skill } of plannedSkills) {
+    try {
+      const layout = dryRun
+        ? { created: [], warnings: [] }
+        : writeSkill(repo.root, skill, { exclusive: true, ensureLayout: false });
+      results.skills.push({ path: skill.path, dryRun, created: layout.created });
+      if (!dryRun) {
+        ownedSkillPaths.push(...("ownership" in layout && Array.isArray(layout.ownership) ? layout.ownership : []));
+      }
+      for (const w of layout.warnings) if (!results.warnings.includes(w)) results.warnings.push(w);
+    } catch (err) {
+      skillFailures.push({ file: skill.path, edit: edit.id, error: err.message });
+    }
+  }
+
+  const rollbackSkills = () => {
+    const { removed, conflicts } = removeOwnedSkillPaths(ownedSkillPaths);
+    removeEmptyDirectories(createdDirectoryCandidates);
+    results.skills = [];
+    const removedPaths = removed.map((item) => item.relative).filter(Boolean);
+    if (removedPaths.length) {
+      results.failed.push({
+        error: `rolled back skill paths written earlier in this round: ${removedPaths.join(", ")}`,
+      });
+    }
+    for (const item of conflicts) {
+      results.failed.push({
+        file: item.relative,
+        error: `${item.relative} rollback conflict: the skill changed after this apply wrote it; left untouched`,
+      });
+    }
+  };
+
+  if (skillFailures.length) {
+    results.failed.push(...skillFailures);
+    rollbackSkills();
+    for (const { relative } of planned) {
+      results.failed.push({
+        file: relative,
+        error: `${relative} was left unchanged: its edits point at a skill that could not be written`,
+      });
+    }
+    return results;
+  }
+
+  const orderedPlanned = [...resolvedPlanned].sort((a, b) => {
+    const aMemory = a.relative === proposal.memoryFile.path;
+    const bMemory = b.relative === proposal.memoryFile.path;
+    return Number(aMemory) - Number(bMemory);
+  });
+  const committed = [];
+  const rollbackCommitted = () => {
+    for (const written of [...committed].reverse()) {
+      if (!commitStillCurrent(written.commit)) {
+        results.failed.push({
+          file: written.relative,
+          error: `${written.relative} rollback conflict: the file changed after this apply wrote it; left untouched`,
+        });
+        continue;
+      }
+      try {
+        atomicReplace(written.commit.absolute, written.before);
+      } catch (rollbackError) {
+        results.failed.push({
+          file: written.relative,
+          error: `${written.relative} could not be rolled back: ${rollbackError.message}`,
+        });
+      }
+    }
+    results.written = [];
+  };
+  const landedDescriptionDelta = descriptionTokensProjected - descriptionTokensNow;
+  const budgetTarget = memoryPlan || orderedPlanned.find((item) => !nestedBudgets.has(item.relative));
+  const surfaceBudget = budgetTarget
+    ? budgetStatus(memoryText, memoryPlan?.text ?? memoryText, config.budgetTokens, {
+        current: descriptionTokensNow,
+        projected: descriptionTokensNow + landedDescriptionDelta,
+      })
+    : null;
+  for (const item of orderedPlanned) {
+    const { relative, resolved, text, applied } = item;
+    const budget = item === budgetTarget ? surfaceBudget : (nestedBudgets.get(relative) ?? null);
+
+    let commit = null;
+    try {
+      if (!dryRun) commit = atomicReplace(resolved, text);
+    } catch (err) {
+      const blocked = refuseReadOnlySymlink(item.absolute);
+      results.failed.push({
+        file: relative,
+        error: blocked || `${relative} could not be written: ${err.message}`,
+      });
+      rollbackCommitted();
+      rollbackSkills();
+      return results;
+    }
+    committed.push({ ...item, commit });
+    results.written.push({ file: relative, edits: applied, budget, dryRun });
+  }
+
+  for (const [relative, budget] of nestedBudgets) {
+    if (!budget.withinBudget) results.warnings.push(overBudgetWarning(relative, budget));
+  }
+  if (surfaceBudget && !surfaceBudget.withinBudget) {
+    results.warnings.push(
+      overBudgetWarning(
+        surfaceLabel(
+          proposal.memoryFile.path,
+          Math.max(descriptionTokensNow, descriptionTokensNow + landedDescriptionDelta),
+        ),
+        surfaceBudget,
+      ),
+    );
+  }
+
+  if (!dryRun && canonical) {
+    try {
+      const layout = ensureSkillsLayout(repo.root, claudeSkillsLink, ownedSkillPaths);
+      const result = results.skills.find(({ path: skillPath }) => skillPath === canonical.skill.path);
+      result.created = [...new Set([...result.created, ...layout.created])];
+      for (const w of layout.warnings) if (!results.warnings.includes(w)) results.warnings.push(w);
+    } catch (err) {
+      results.failed.push({ file: claudeSkillsLink, edit: canonical.edit.id, error: err.message });
+      rollbackCommitted();
+      rollbackSkills();
+      return results;
+    }
+  }
+
+  // Rejections are remembered so the same edit is not re-proposed without new evidence.
+  if (!dryRun) {
+    try {
+      if (rejected.length) {
+        const rejections = state.readRejections();
+        for (const edit of rejected)
+          recordRejection(edit, rejections, new Date().toISOString(), rejectReasons[edit.id]);
+        state.writeRejections(rejections);
+        results.rejectionsRecorded = true;
+      }
+      if (accepted.length && appliedBy) {
+        state.writeProposal({ ...proposal, appliedAt: new Date().toISOString(), appliedBy }, proposal);
+      }
+    } catch (err) {
+      results.failed.push({ error: err.message });
+      rollbackCommitted();
+      rollbackSkills();
+      return results;
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Seed a repo that has no memory file: the canonical file plus the pointer. Each file
+ * is created only if absent - bootstrap never overwrites, so a pre-existing file (say a
+ * CLAUDE.md the user wrote while a run was in flight) is reported, not replaced.
+ */
+export function writeBootstrapFiles(repoRoot, files) {
+  const results = { written: [], skipped: [] };
+  for (const { path: relative, text } of files) {
+    const absolute = path.join(repoRoot, relative);
+    if (fs.existsSync(absolute)) {
+      results.skipped.push({ file: relative, reason: "already exists" });
+      continue;
+    }
+    fs.writeFileSync(absolute, text, { flag: "wx" });
+    results.written.push({ file: relative, bytes: Buffer.byteLength(text, "utf8") });
+  }
+  return results;
+}

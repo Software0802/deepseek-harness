@@ -1,0 +1,55 @@
+#!/usr/bin/env node
+// Stand-in for `lavish-axi`, shaped like the real CLI's output (captured from lavish-axi
+// 0.1.61): the open command prints the session URL YAML-quoted, refuses a session the user
+// ended from the browser unless `--reopen` is passed, and `poll` returns whatever the
+// scenario file queues, one entry per call, so tests can script a chatty review surface.
+import fs from "node:fs";
+
+const args = process.argv.slice(2);
+const scenarioPath = process.env.FAKE_LAVISH_SCENARIO;
+const scenario = scenarioPath && fs.existsSync(scenarioPath) ? JSON.parse(fs.readFileSync(scenarioPath, "utf8")) : {};
+const save = () => scenarioPath && fs.writeFileSync(scenarioPath, JSON.stringify(scenario));
+
+const [cmd] = args;
+const url = scenario.url || "http://127.0.0.1:4387/session/51233fdaf6389690";
+
+if (cmd === "poll") {
+  const next = scenario.polls?.shift();
+  save();
+  if (!next) {
+    console.error("fake lavish-axi: poll queue exhausted");
+    process.exit(2);
+  }
+  // `status: ended` is what the real CLI emits once the reviewer ended the session and
+  // nothing is queued; the prose around it never contains the words "session ended".
+  if (next === "ENDED") {
+    process.stdout.write(`session:\n  file: ${args[1]}\n  status: ended\n  ended_by: user\n`);
+    process.exit(0);
+  }
+  // A `Send & End` that carries feedback arrives as the final `status: feedback` block
+  // flagged with `session_ended: true`.
+  // An entry may also be `{ body, stderr }`: the real CLI writes its long-poll banner to
+  // stderr, and backpass concatenates both streams before matching, so tests need to be
+  // able to put text on stderr too.
+  const entry = typeof next === "string" ? { body: next } : next;
+  const ending = entry.body.startsWith("ENDING:");
+  const body = ending ? entry.body.slice("ENDING:".length) : entry.body;
+  const flags = ending ? "  session_ended: true\n  ended_by: user\n" : "";
+  process.stdout.write(`session:\n  file: ${args[1]}\n  status: feedback\n${flags}${body}\n`);
+  if (entry.stderr) process.stderr.write(entry.stderr);
+} else if (cmd === "end") {
+  process.stdout.write(`session:\n  file: ${args[1]}\n  status: ended\n`);
+} else {
+  const reopen = args.includes("--reopen");
+  scenario.openCount = (scenario.openCount || 0) + 1;
+  if (scenario.userEnded && !reopen) {
+    save();
+    // The real refusal: exit 0, and the dead session's URL is still printed.
+    process.stdout.write(`session:\n  file: ${cmd}\n  url: "${url}"\n  status: user-ended\n`);
+    process.exit(0);
+  }
+  if (scenario.userEnded) scenario.reopened = true;
+  if (!args.includes("--no-open")) scenario.browserLaunches = (scenario.browserLaunches || 0) + 1;
+  save();
+  process.stdout.write(`session:\n  file: ${cmd}\n  url: "${url}"\n  status: opened\n`);
+}

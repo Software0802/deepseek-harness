@@ -1,0 +1,433 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+import { bootstrapRun } from "../src/commands/bootstrap.js";
+import { foldForRun } from "../src/commands/propose.js";
+import { renderPointer, renderStarterMemory } from "../src/bootstrap.js";
+import { loadConfig } from "../src/config.js";
+import { UserError, setLoggerSink } from "../src/logger.js";
+import { isPointerTo, memorySetHash, memoryTextHash, parseMemoryUnits } from "../src/memory.js";
+import { evidenceKey, State } from "../src/state.js";
+import { clearProgressSink, setProgressSink } from "../src/progress.js";
+import { ProposalViolation } from "../src/proposal.js";
+import { HostCache, PRUNE_MAX_AGE_MS } from "../src/discovery/cache.js";
+
+const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../bin/backpass");
+
+function makeRepo(files = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "backpass-bootstrap-"));
+  for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), text);
+  return { root: dir, realRoot: dir, name: "demo-repo", worktrees: [dir], remotes: [] };
+}
+
+function makeCtx(repo, overrides = {}) {
+  const config = loadConfig(repo.root, overrides);
+  config.state = new State(repo.root).ensure();
+  return { repo, config, flags: {}, version: "test" };
+}
+
+function transcript(id) {
+  return {
+    id,
+    identity: `claude:${id}`,
+    nativeId: id,
+    harness: "claude",
+    path: `/x/${id}.jsonl`,
+    mtimeMs: 1,
+    bytes: 10,
+    startedAt: 1,
+  };
+}
+
+const discoverNone = async () => ({ transcripts: [], perHarness: {} });
+const discoverTwo = async () => ({ transcripts: [transcript("s1"), transcript("s2")], perHarness: { claude: {} } });
+
+/** Stands in for the tier-1 model: every session reports the same gap against the starter. */
+function writeFakeEvidence({ transcripts, memoryFile, config, memoryHash }, domainAt = (_index) => undefined) {
+  for (const [index, t] of transcripts.entries()) {
+    const evidenceTranscript = { ...t, interaction: "interactive" };
+    config.state.writeEvidence(t.id, {
+      status: "ok",
+      transcript: evidenceTranscript,
+      memoryHash,
+      key: evidenceKey(evidenceTranscript, memoryHash),
+      memoryPath: memoryFile.path,
+      positive: [],
+      negative: [],
+      gaps: [
+        {
+          mistake: "ran migrations against the shared db",
+          proposedInstruction: "Run migrations only against a scratch database.",
+          recurrenceRisk: "high",
+          quote: "applied the migration to prod-db",
+          ...(domainAt(index) ? { domain: domainAt(index) } : {}),
+        },
+      ],
+    });
+  }
+  return { total: transcripts.length, analyzed: transcripts.length, cached: 0, skipped: 0, failed: 0, usage: [] };
+}
+
+function fakeAnalyze(args) {
+  return writeFakeEvidence(args);
+}
+
+function fakeAnalyzeMixed(args) {
+  return writeFakeEvidence(args, (index) => (index === 1 ? "orchestration" : "project"));
+}
+
+/**
+ * Stands in for the synthesis harness: edits the staging copy the way a harness's own
+ * file tools would, then annotates the measured change.
+ */
+function fakeSynthesize(captured) {
+  return async ({ memoryFile, summary, runNote }) => {
+    captured.runNote = runNote;
+    captured.gapClusters = summary.totals.gapClusters;
+    const { buildProposal } = await import("../src/proposal.js");
+    const { stageAndMeasure, writeIn } = await import("./helpers/staging.js");
+    const { measured } = stageAndMeasure({
+      repo: captured.repo,
+      memoryPath: memoryFile.path,
+      edit: (root) =>
+        writeIn(root, memoryFile.path, (t) =>
+          t.replace(
+            "- None recorded yet. backpass adds evidence-backed entries here from real sessions.",
+            "- Run migrations only against a scratch database, never the shared one.",
+          ),
+        ),
+    });
+    const { proposal, violations } = buildProposal(
+      {
+        edits: [
+          {
+            changes: ["H1"],
+            kind: "rewrite",
+            title: "record the migration trap",
+            evidence: summary.gaps[0].quotes.map((quote) => ({
+              polarity: "negative",
+              text: quote.text,
+              source: quote.source,
+            })),
+            transcripts: 2,
+          },
+        ],
+      },
+      { memoryFile, config: captured.config, repo: captured.repo, summary, measured },
+    );
+    assert.deepEqual(violations, []);
+    return { proposal, violations };
+  };
+}
+
+function withSink(fn) {
+  const lines = [];
+  setLoggerSink((l) => lines.push(l));
+  return fn().then(
+    (r) => {
+      setLoggerSink(null);
+      return { result: r, lines };
+    },
+    (e) => {
+      setLoggerSink(null);
+      throw e;
+    },
+  );
+}
+
+test("starter memory is the minimal skeleton: purpose, an empty Learnings section, self-governance", () => {
+  const repo = makeRepo({
+    "package.json": JSON.stringify({ name: "demo", scripts: { check: "x", test: "y" } }),
+    "pnpm-lock.yaml": "",
+    "README.md": "# demo",
+  });
+  const text = renderStarterMemory({ repo });
+  assert.match(text, /^# Project agent memory/);
+  assert.match(text, /demo-repo/);
+  const headings = text.split("\n").filter((l) => l.startsWith("## "));
+  assert.deepEqual(headings, ["## Learnings", "## Maintaining this file"]);
+  assert.match(
+    text,
+    /## Learnings\n\n- None recorded yet\. backpass adds evidence-backed entries here from real sessions\./,
+  );
+  assert.doesNotMatch(text, /Sharp edges|Orientation|Conventions|pnpm|README/);
+  assert.ok(parseMemoryUnits(text).length >= 3, "the starter parses into memory units");
+
+  // Deterministic: the checkout's contents no longer change the starter.
+  assert.equal(renderStarterMemory({ repo: makeRepo() }), text);
+});
+
+test("a bootstrap run invalidates an older proposal", () => {
+  const repo = makeRepo();
+  execFileSync("git", ["init", "-q"], { cwd: repo.root });
+  const state = new State(repo.root).ensure();
+  state.writeProposal({ generatedAt: "earlier", edits: [{ id: "stale" }] });
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "backpass-bootstrap-home-"));
+
+  const result = spawnSync(process.execPath, [CLI, "--since", "1m"], {
+    cwd: repo.root,
+    encoding: "utf8",
+    env: { ...process.env, HOME: home, NO_COLOR: "1" },
+  });
+
+  assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+  assert.equal(fs.existsSync(path.join(repo.root, "AGENTS.md")), true);
+  assert.equal(state.readProposal(), null);
+});
+
+test("no memory file and no transcripts: seeds AGENTS.md from defaults plus a CLAUDE.md pointer", async () => {
+  const repo = makeRepo();
+  const ctx = makeCtx(repo);
+  const { result, lines } = await withSink(() => bootstrapRun(ctx, { discover: discoverNone }));
+
+  assert.equal(result.seededFrom, "defaults");
+  assert.deepEqual(
+    result.files.written.map((w) => w.file),
+    ["AGENTS.md", "CLAUDE.md"],
+  );
+  assert.ok(
+    lines.some((l) => /no memory file found.*bootstrapping AGENTS\.md from 0 transcript\(s\) \+ defaults/.test(l)),
+  );
+
+  const agents = fs.readFileSync(path.join(repo.root, "AGENTS.md"), "utf8");
+  assert.match(agents, /## Maintaining this file/);
+  const claude = fs.readFileSync(path.join(repo.root, "CLAUDE.md"), "utf8");
+  assert.equal(claude, renderPointer("AGENTS.md"));
+  assert.equal(isPointerTo(claude, "AGENTS.md"), true);
+});
+
+test("bootstrap prefetches remote sessions and prunes its host cache", async () => {
+  const repo = makeRepo();
+  const ctx = makeCtx(repo);
+  const cache = new HostCache(ctx.config.state.root);
+  const index = cache.readIndex();
+  const stale = cache.write(
+    index,
+    { host: "old-host", harness: "claude", key: "stale", kind: "raw", mtimeMs: 1, bytes: 5 },
+    Buffer.from("stale"),
+  );
+  index.entries[stale.name].usedAt = new Date(Date.now() - PRUNE_MAX_AGE_MS - 1_000).toISOString();
+  cache.writeIndex(index);
+
+  const remote = {
+    ...transcript("remote-1"),
+    host: "mac-home",
+    remote: { host: "mac-home", key: "remote-1", kind: "raw" },
+  };
+  let prefetched = 0;
+  await bootstrapRun(ctx, {
+    discover: async () => ({ transcripts: [remote], perHarness: { claude: {} } }),
+    prefetch: async (pending) => {
+      prefetched += pending.length;
+      pending[0].remote.cachePath = "/cached/remote-1";
+    },
+    analyze: async (args) => {
+      await args.prefetch(args.transcripts);
+      assert.equal(args.transcripts[0].remote.cachePath, "/cached/remote-1");
+      return { total: 1, analyzed: 0, cached: 0, skipped: 1, failed: 0, usage: [] };
+    },
+    fold: async () => ({
+      instructions: [],
+      gaps: [],
+      analyzedSessions: 0,
+      totals: { gapClusters: 0, reportOnlyGapClusters: 0, droppedGapSingletons: 0 },
+    }),
+  });
+
+  assert.equal(prefetched, 1);
+  assert.equal(fs.existsSync(stale.path), false);
+  assert.equal(cache.readIndex().entries[stale.name], undefined);
+});
+
+test("bootstrap analyzes and folds only the balanced capped sample", async () => {
+  const repo = makeRepo();
+  const ctx = makeCtx(repo, { maxTranscripts: 100, seed: 1 });
+  const discovered = [
+    ...Array.from({ length: 2 }, (_, i) => ({
+      ...transcript(`human-${i}`),
+      interaction: "interactive",
+    })),
+    ...Array.from({ length: 198 }, (_, i) => ({
+      ...transcript(`robot-${i}`),
+      interaction: "non-interactive",
+    })),
+  ];
+  const captured = {};
+  const analyze = async ({ transcripts }) => {
+    captured.analyzed = transcripts;
+    return {
+      total: transcripts.length,
+      analyzed: transcripts.length,
+      cached: 0,
+      skipped: 0,
+      failed: 0,
+      usage: [],
+    };
+  };
+  const fold = async (_ctx, _file, _hash, _skills, transcripts) => {
+    captured.folded = transcripts;
+    return {
+      analyzedSessions: 0,
+      instructions: [],
+      totals: { gapClusters: 0, droppedGapSingletons: 0 },
+    };
+  };
+
+  const { result } = await withSink(() =>
+    bootstrapRun(ctx, {
+      discover: async () => ({ transcripts: discovered, perHarness: { claude: {} } }),
+      analyze,
+      fold,
+    }),
+  );
+
+  assert.equal(result.transcripts, 100);
+  assert.equal(captured.analyzed.length, 100);
+  assert.deepEqual(captured.folded, captured.analyzed);
+  assert.equal(captured.analyzed.filter((item) => item.interaction === "interactive").length, 2);
+  assert.equal(captured.analyzed.filter((item) => item.interaction === "non-interactive").length, 98);
+});
+
+test("bootstrap progress counts a report-only mixed cluster once", async () => {
+  const repo = makeRepo();
+  const ctx = makeCtx(repo, { minGapEvidence: 3 });
+  const events = [];
+  setProgressSink((event, data) => events.push({ event, data }));
+  try {
+    await bootstrapRun(ctx, {
+      discover: discoverTwo,
+      analyze: fakeAnalyzeMixed,
+      synthesize: async () => {
+        throw new ProposalViolation("stop after fold", []);
+      },
+    });
+  } finally {
+    clearProgressSink();
+  }
+
+  const folded = events.find((entry) => entry.event === "fold:done");
+  assert.equal(folded.data.clustersFound, 1);
+  assert.equal(folded.data.clustersKept, 0);
+});
+
+test("with transcripts: analysis gaps become the first evidence-backed instruction", async () => {
+  const repo = makeRepo();
+  const ctx = makeCtx(repo);
+  const captured = { config: ctx.config, repo };
+  const consolidationUsage = { agent: "claude", usage: { input: 200, output: 10, total: 210 } };
+  const fold = async (...args) => {
+    const summary = await foldForRun(...args);
+    summary.consolidation = { merged: 1, usage: consolidationUsage };
+    return summary;
+  };
+  const { result, lines } = await withSink(() =>
+    bootstrapRun(ctx, { discover: discoverTwo, analyze: fakeAnalyze, fold, synthesize: fakeSynthesize(captured) }),
+  );
+
+  assert.ok(lines.some((l) => /bootstrapping AGENTS\.md from 2 transcript\(s\) \+ defaults/.test(l)));
+  assert.match(captured.runNote, /seeded from generic defaults/);
+  assert.equal(captured.gapClusters, 1, "the two sessions' gaps folded into one cluster");
+  assert.equal(result.seededFrom, "transcripts + defaults");
+  assert.deepEqual(result.proposal.usage, [consolidationUsage]);
+  assert.deepEqual(
+    result.applied.written.map((w) => w.file),
+    ["AGENTS.md"],
+  );
+
+  assert.match(captured.runNote, /`## Learnings`/);
+  assert.doesNotMatch(captured.runNote, /Sharp edges/);
+
+  const agents = fs.readFileSync(path.join(repo.root, "AGENTS.md"), "utf8");
+  assert.match(agents, /scratch database/);
+  assert.doesNotMatch(agents, /None recorded yet/);
+  assert.match(agents, /## Maintaining this file/);
+  // The entry landed inside ## Learnings, not in a new or renamed section.
+  const learnings = agents.slice(agents.indexOf("## Learnings"), agents.indexOf("## Maintaining this file"));
+  assert.match(learnings, /^- Run migrations only against a scratch database/m);
+  assert.deepEqual(
+    agents.split("\n").filter((l) => l.startsWith("## ")),
+    ["## Learnings", "## Maintaining this file"],
+  );
+  assert.equal(fs.readFileSync(path.join(repo.root, "CLAUDE.md"), "utf8"), renderPointer("AGENTS.md"));
+
+  const bootstrapHash = memorySetHash([
+    { path: "AGENTS.md", hash: memoryTextHash(renderStarterMemory({ repo })) },
+    { path: "CLAUDE.md", hash: memoryTextHash(renderPointer("AGENTS.md")) },
+  ]);
+  assert.deepEqual(
+    ctx.config.state.listEvidence().map((e) => e.memoryHash),
+    [bootstrapHash, bootstrapHash],
+    "bootstrap evidence uses the effective memory-set hash that a later proposal fold expects",
+  );
+
+  // The applied proposal is marked so `backpass apply` cannot replay it onto the new file.
+  const saved = ctx.config.state.readProposal();
+  assert.equal(saved.appliedBy, "bootstrap");
+  assert.ok(saved.appliedAt);
+});
+
+test("bootstrap aborts analysis when the canonical memory file appears during discovery", async () => {
+  const repo = makeRepo();
+  const ctx = makeCtx(repo);
+  let analyzed = false;
+  const discoverWithConcurrentMemory = async () => {
+    fs.writeFileSync(path.join(repo.root, "AGENTS.md"), "# Concurrent instructions\n\n- Keep this file.\n");
+    return discoverTwo();
+  };
+
+  await assert.rejects(
+    () =>
+      withSink(() =>
+        bootstrapRun(ctx, {
+          discover: discoverWithConcurrentMemory,
+          analyze: async () => {
+            analyzed = true;
+          },
+        }),
+      ),
+    (error) =>
+      error instanceof UserError &&
+      /changed while backpass was bootstrapping/.test(error.message) &&
+      /run `backpass` again/.test(error.hint),
+  );
+
+  assert.equal(analyzed, false);
+  assert.equal(
+    fs.readFileSync(path.join(repo.root, "AGENTS.md"), "utf8"),
+    "# Concurrent instructions\n\n- Keep this file.\n",
+  );
+  assert.deepEqual(ctx.config.state.listEvidence(), []);
+});
+
+test("bootstrap never overwrites: a CLAUDE.md that appears is kept, only the missing file is created", async () => {
+  const repo = makeRepo({ "CLAUDE.md": "# mine\n" });
+  // Config looks only for AGENTS.md, so there is "no memory file" yet CLAUDE.md exists on disk.
+  const ctx = makeCtx(repo, { memoryFiles: ["AGENTS.md"] });
+  const { result } = await withSink(() => bootstrapRun(ctx, { discover: discoverNone }));
+
+  assert.deepEqual(
+    result.files.written.map((w) => w.file),
+    ["AGENTS.md"],
+  );
+  assert.deepEqual(result.files.skipped, [{ file: "CLAUDE.md", reason: "already exists" }]);
+  assert.equal(fs.readFileSync(path.join(repo.root, "CLAUDE.md"), "utf8"), "# mine\n");
+});
+
+test("a memoryFiles override bootstraps that path, with CLAUDE.md pointing at it", async () => {
+  const repo = makeRepo();
+  fs.mkdirSync(path.join(repo.root, "docs"));
+  const ctx = makeCtx(repo, { memoryFiles: ["docs/AGENTS.md"] });
+  const { result } = await withSink(() => bootstrapRun(ctx, { discover: discoverNone }));
+
+  assert.deepEqual(
+    result.files.written.map((w) => w.file),
+    ["docs/AGENTS.md", "CLAUDE.md"],
+  );
+  const claude = fs.readFileSync(path.join(repo.root, "CLAUDE.md"), "utf8");
+  assert.equal(isPointerTo(claude, "docs/AGENTS.md"), true);
+});
