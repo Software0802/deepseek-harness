@@ -69,7 +69,11 @@ const PEER_REQUIRED_HOST_EXPORTS = {
   // `instanceof` checks need the translator's own class instance.
   '@deepseek-ai/dsh-experimental-translator': ['TranslationError'],
   '@deepseek-ai/dsh-scope': ['carrierKeyOf', 'createScope', 'scopeOf', 'scopeTarget'],
-  '@deepseek-ai/dsh-session': ['SESSION_FORMAT_VERSION'],
+  '@deepseek-ai/dsh-session': ['SESSION_FORMAT_VERSION', 'appendPluginRecord', 'pluginRecordOf'],
+  // vflow resolves these through the bundle's shared installation instead of private copies.
+  '@deepseek-ai/dsh-skill-filesystem': ['apply', 'inject', 'name'],
+  '@deepseek-ai/dsh-atomic-write': ['writeFileAtomic'],
+  '@deepseek-ai/dsh-tools': ['defineTool'],
   '@deepseek-ai/dsh-session-persistence': ['SessionPersistenceNotFoundError'],
 } as const satisfies HostDependencyExports
 

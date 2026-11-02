@@ -596,6 +596,65 @@ Types: [Agent](core.zh.md) · [ContentBlock](llm-streaming.zh.md) · [MessageId]
 
 Source: [`packages/subagent/subagent/src/index.ts`](../../packages/subagent/subagent/src/index.ts)
 
+<a id="ctxvflowfleet--fleetservice"></a>
+
+### `ctx.vflowFleet` — `FleetService`
+
+Dispatches, supervises, and answers fleet tasks recorded in lead Sessions.
+
+```ts cordis-catalog
+/**
+ * Fleet tasks recorded in a lead Session.
+ * @param lead - the lead agent.
+ * @returns tasks in dispatch order.
+ */
+tasks(lead: Agent): readonly FleetTaskView[]
+
+/**
+ * Record a task and start it when the lead has a free slot.
+ * @param lead - the dispatching agent; its directory selects the repository for ship worktrees.
+ * @param input - ticket, title, kind, and the child's instructions.
+ * @returns the task id and its status after the start attempt.
+ */
+async dispatch(lead: Agent, input: DispatchInput): Promise<DispatchResult>
+
+/**
+ * Record a progress report from a fleet child.
+ * @param child - the reporting child agent.
+ * @param node - its current V-model stage.
+ * @param activity - one line on what it is doing.
+ */
+report(child: Agent, node: VModelNode, activity: string): void
+
+/**
+ * Put a question from a fleet child in front of the user.
+ * @param child - the asking child agent.
+ * @param question - what the user must decide.
+ * @param options - two to four answers.
+ * @returns the decision id.
+ */
+requestDecision(child: Agent, question: string, options: readonly string[]): VflowDecisionId
+
+/**
+ * How many tasks of one lead Session run at the same time.
+ * @returns the configured parallel limit.
+ */
+@Remote capacity(): Promise<number>
+
+/**
+ * Answer a fleet task's pending decision and send the answer to its child as the user's next message.
+ * @param agent - the lead Session the panel shows.
+ * @param taskId - the asking task.
+ * @param decisionId - the decision the user saw.
+ * @param choice - index of the chosen option.
+ */
+@Remote async answer(agent: Agent, taskId: string, decisionId: string, choice: number): Promise<void>
+```
+
+Types: [Agent](core.zh.md)
+
+Source: [`packages/experimental/vflow-skills/src/fleet.ts`](../../packages/experimental/vflow-skills/src/fleet.ts)
+
 <a id="subagent-events"></a>
 
 ### `subagent/*` events

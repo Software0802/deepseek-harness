@@ -1,0 +1,58 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/experimental/vflow-skills/README.md
+/:
+  en: a166703a3f67531f
+  zh: 8fdc3b535a2774da
+/deepseek-ai-dsh-experimental-vflow-skills:
+  en: c2d96804cc4ca02a
+  zh: 9556f7cdfd1570a7
+/deepseek-ai-dsh-experimental-vflow-skills/summary:
+  en: fd51d4ec883f8594
+  zh: 956affc52c63ee70
+/deepseek-ai-dsh-experimental-vflow-skills/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 2f8a621b991260a1
+/deepseek-ai-dsh-experimental-vflow-skills/use-this-package:
+  en: 7fcb5b2c0939d9cc
+  zh: 2ebc80c8a196ec28
+/deepseek-ai-dsh-experimental-vflow-skills/use-this-package/settings-page-and-setup-guide:
+  en: ea4afbab849f7413
+  zh: 5eb81f4722e090dc
+/deepseek-ai-dsh-experimental-vflow-skills/use-this-package/team-settings:
+  en: 7d4246f7703d7ef2
+  zh: 4ffd5b3f7b8907f3
+/deepseek-ai-dsh-experimental-vflow-skills/use-this-package/connector-accounts:
+  en: 963dcfe884d414b6
+  zh: 443884d2dd4fccce
+/deepseek-ai-dsh-experimental-vflow-skills/use-this-package/fleet:
+  en: 3b509a0596fed165
+  zh: bef63a58ca982479
+/deepseek-ai-dsh-experimental-vflow-skills/understand-the-implementation:
+  en: fc3df5005e9143d0
+  zh: d3ebcc7951be85f1
+/deepseek-ai-dsh-experimental-vflow-skills/further-exploration:
+  en: c1cfe2b17f18f102
+  zh: 267ab27599366658
+/deepseek-ai-dsh-experimental-vflow-skills/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-experimental-vflow-skills/model-experience/skill-catalog:
+  en: 8b567c1237c67579
+  zh: 474c6e0fcd83f93a
+/deepseek-ai-dsh-experimental-vflow-skills/model-experience/skill-catalog/what-the-model-sees:
+  en: ff885b92288e27b0
+  zh: 1c8c6811635f1303
+/deepseek-ai-dsh-experimental-vflow-skills/model-experience/skill-catalog/token-effect:
+  en: 6b6dc1a2d45412f8
+  zh: 3eb21988e7aa0ee0
+/deepseek-ai-dsh-experimental-vflow-skills/model-experience/skill-catalog/kv-cache-effect:
+  en: a26336dcdcd420d5
+  zh: c82473f701bc599b
+/deepseek-ai-dsh-experimental-vflow-skills/known-limitations-and-deferred-work:
+  en: 8184acbbc52c7c17
+  zh: 19beb7e2c6192584
+/deepseek-ai-dsh-experimental-vflow-skills/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: e88aeb617ffb74ea

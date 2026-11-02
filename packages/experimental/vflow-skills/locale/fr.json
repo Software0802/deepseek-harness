@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Flux de développement à la japonaise",
+    "description": "Fournit aux agents les règles de travail du second de vflow sous forme de compétence.",
+    "detail": "docs/DETAIL.md"
+  }
+}

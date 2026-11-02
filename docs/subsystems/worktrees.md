@@ -27,9 +27,9 @@ interface CreateWorktreeRequest {
 ```
 
 ```ts type-equiv
-/** Committed Git baseline and the calling Session's resulting working directory. */
+/** Committed Git baseline and the new checkout directory. */
 interface CreatedWorktree {
-  /** Canonical absolute checkout directory in the filesystem provider's execution world. */
+  /** Absolute checkout directory in the filesystem provider's execution world; canonical when the caller entered it. */
   path: string
   /** Newly created branch name. */
   branch: string
@@ -68,6 +68,16 @@ Creates retained Git worktrees under the mounted filesystem and sandbox provider
  * @returns canonical checkout path, branch name, pinned commit, and source repository root.
  */
 async create(agent: Agent, request: CreateWorktreeRequest = {}, signal?: AbortSignal): Promise<CreatedWorktree>
+
+/**
+ * Create a fresh branch and checkout exactly as {@link create} does, but leave the caller's
+ * working directory unchanged so another Session can start in the returned path.
+ * @param agent - caller whose current directory selects the source repository and file policy.
+ * @param request - optional new name and local revision; defaults are generated name and HEAD.
+ * @param signal - cancellation of lookup and creation.
+ * @returns checkout path in the filesystem provider's execution world, branch name, pinned commit, and source repository root.
+ */
+async prepare(agent: Agent, request: CreateWorktreeRequest = {}, signal?: AbortSignal): Promise<CreatedWorktree>
 ```
 
 Types: [Agent](core.md)

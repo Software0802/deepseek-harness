@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Japanischer Entwicklungs-Workflow",
+    "description": "Stellt Agenten die vflow-Arbeitsregeln des Ersten Offiziers als Skill bereit.",
+    "detail": "docs/DETAIL.md"
+  }
+}
